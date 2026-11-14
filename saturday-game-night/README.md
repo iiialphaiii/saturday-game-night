@@ -43,7 +43,7 @@ The SQL creates the event, participant, game, and vote tables, enables row-level
 - Suggest games and vote/unvote on any game while voting is open.
 
 ## Notes
-- Anyone with the app URL can join; no invite list is required.
+- The app URL is public, but creating a new participant account requires the current group password. Existing registered participants can continue using their existing browser session.
 - Anonymous sessions are browser/device-specific. If someone clears browser data or switches devices, they may appear as a new participant.
 - The Supabase anon/publishable key is intended for browser use; keep row-level security enabled. Never put a service-role key in this app.
 - This starter app does not include an admin dashboard to close voting. The `event_settings.voting_open` field can be changed to `false` in Supabase Table Editor when you want to close voting.
@@ -78,3 +78,14 @@ where p.id = u.id
 Reload the app after the role change. The app refreshes the current session token at startup so the new JWT includes the admin claim; do not sign out of the anonymous admin session, because anonymous accounts are browser/device-specific. Admins can correct their own name from the Admin controls. Keep admin access limited to trusted organizers.
 
 The app continues to use anonymous sign-in. Because anonymous sessions are device/browser-specific, an existing participant link request requires an administrator to approve the association. An admin should approve only after verifying who is making the request in person or through a trusted channel.
+
+
+## Group password and administrator management
+
+- New participant registrations must enter the group password before a participant row can be created. The database verifies the password using a bcrypt hash; the plaintext password is never stored or sent to the browser as a setting.
+- Incorrect password attempts are rate-limited per anonymous account (five failures trigger a 15-minute lockout). A database policy also blocks direct API inserts that did not pass the password check.
+- An existing participant session remains active when the group password changes. The new password applies to new anonymous sessions and registrations.
+- Admins can set or replace the group password in **Admin controls → Group password**. Use a password of at least six characters.
+- Admins can promote participants or remove admin access in **Admin controls → Administrator access**. Admin roles are stored in trusted Supabase Auth app metadata, not user-editable profile metadata. The last administrator cannot be removed.
+- When an admin promotes someone, that person should reload the app (or refresh their session) to receive the updated administrator claim. Role removal takes effect when the affected user's access token refreshes.
+- Apply `supabase/migrations/20261113_group_password_and_admin_management.sql` after the existing admin/round-history migration on a fresh project. The connected Game Night Supabase project has already received these changes.
