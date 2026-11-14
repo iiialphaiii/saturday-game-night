@@ -177,8 +177,7 @@ function App() {
     if (value === "TBD Pending...") return "";
     if (!value) return "19:00";
     const match = value.match(/^(\d{1,2}):(\d{2})/);
-    if (!match) return "19:00";
-    return match[1].padStart(2, "0") + ":" + match[2];
+    if (!match) return "19:00";    return match[1].padStart(2, "0") + ":" + match[2];
   }
   function toInputEventTime(value) {
     if (!value) return "19:00";
@@ -210,7 +209,6 @@ function App() {
     e.preventDefault();
     const clean = nameInput.trim().replace(/\s+/g, " ");
     if (!clean || !db) return;
-    if (participantPassword.length < 8) { setError("Participant password must be at least 8 characters."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
       let current = session;
@@ -235,6 +233,8 @@ function App() {
         await refresh();
         return;
       }
+
+      if (participantPassword.length < 8) { setError("Participant password must be at least 8 characters."); return; }
 
       const { data: allParticipants, error: peopleError } = await db.from("participants").select("id,name,is_active");
       if (peopleError) throw peopleError;
@@ -358,7 +358,6 @@ function App() {
       setBusy(false);
     }
   }
-
   async function updateMyParticipantSlogan(e) {
     e.preventDefault();
     const clean = participantSloganDraft.trim();
@@ -537,8 +536,7 @@ function App() {
     else { setNotice("Round updated."); await refresh(); }
   }
 
-  async function deleteRound(round) {
-    if (!window.confirm("Delete Round " + round.round_number + " and all placements recorded for this round? This cannot be undone.")) return;
+  async function deleteRound(round) {    if (!window.confirm("Delete Round " + round.round_number + " and all placements recorded for this round? This cannot be undone.")) return;
     const { error: e } = await db.from("game_rounds").delete().eq("id", round.id);
     if (e) setError(e.message);
     else { setNotice("Round and its placements deleted."); await refresh(); }
