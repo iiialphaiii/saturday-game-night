@@ -60,4 +60,7 @@
 .vote-audit span{overflow-wrap:anywhere}
 @media(max-width:600px){.game-actions{flex-wrap:wrap}.vote-actions{width:100%}.vote-actions .vote{flex:1}}
 
-.net-vote-score{margin-top:6px;color:#bfc3d2;font-size:11px}.net-vote-score strong{color:#f3efff;font-size:15px;font-variant-numeric:tabular-nums}.net-vote-score span{color:#8f95a8;font-size:10px}
+.game-heading{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.game-score{display:inline-flex;align-items:center;justify-content:center;min-width:34px;color:#f3efff;font-size:25px;line-height:1;font-weight:800;font-variant-numeric:tabular-nums}
+.vote-caption{margin-top:4px;color:#9298aa;font-size:10px;line-height:1.4}
+.vote-caption::first-letter{color:#c5b6ff}
