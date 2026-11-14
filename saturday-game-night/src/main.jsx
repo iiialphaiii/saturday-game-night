@@ -460,10 +460,10 @@ function App() {
 
   async function addGame(e) {
     e.preventDefault();
-    if (!gameTitle.trim() || !participantId) return;
+    if (!gameTitle.trim() || !participantId || !selectedEventId || settings?.is_archived) return;
     setBusy(true); setError(""); setNotice("");
     const { error: e2 } = await db.from("games").insert({
-      title: gameTitle.trim(), description: gameDescription.trim() || null, suggested_by: participantId
+      event_id: selectedEventId, title: gameTitle.trim(), description: gameDescription.trim() || null, suggested_by: participantId
     });
     if (e2) setError(e2.message);
     else { setNotice('"' + gameTitle.trim() + '" was added.'); setGameTitle(""); setGameDescription(""); await refresh(); }
@@ -471,7 +471,7 @@ function App() {
   }
 
   async function vote(gameId) {
-    if (!settings?.voting_open || !participantId) return;
+    if (!settings?.voting_open || !participantId || settings?.is_archived) return;
     const existing = votes.find(v => v.game_id === gameId && v.participant_id === participantId);
     setBusy(true);
     const result = existing
@@ -568,12 +568,7 @@ function App() {
       return;
     }
     setBusy(true); setError(""); setNotice("");
-    const { error: e } = await db.from("event_settings").update({
-      event_title: eventTitleDraft.trim() || "Saturday Game Night",
-      event_date: eventDateDraft,
-      event_time: formatTime(eventTimeDraft),
-      location: eventLocationDraft.trim() || null
-    }).eq("id", 1);
+    const { error: e } = await db.from("game_nights").update({ event_title: eventTitleDraft.trim() || "Saturday Game Night", event_date: eventDateDraft, event_time: formatTime(eventTimeDraft), location: eventLocationDraft.trim() || null }).eq("id", selectedEventId);
     if (e) setError(e.message);
     else {
       setNotice("Game night title, date, time, and location updated.");
@@ -583,7 +578,7 @@ function App() {
   }
 
   async function toggleVoting() {
-    const { error: e } = await db.from("event_settings").update({ voting_open: !settings.voting_open }).eq("id", 1);
+    const { error: e } = await db.from("game_nights").update({ voting_open: !settings.voting_open }).eq("id", selectedEventId);
     if (e) setError(e.message);
     else { setNotice(settings.voting_open ? "Voting has been closed." : "Voting is now open."); await refresh(); }
   }
@@ -691,6 +686,7 @@ function App() {
   }
 
   async function createRound(game) {
+    if (settings?.is_archived) { setError("Archived Game Nights are read-only."); return; }
     const next = Math.max(0, ...rounds.filter(r => r.game_id === game.id).map(r => r.round_number)) + 1;
     const { error: e } = await db.from("game_rounds").insert({
       game_id: game.id, round_number: next, notes: roundNotes[game.id] || null, created_by: session.user.id
@@ -722,6 +718,7 @@ function App() {
 
   async function addPlacement(round) {
     const draft = placementDrafts[round.id] || {};
+    if (settings?.is_archived) { setError("Archived Game Nights are read-only."); return; }
     if (!draft.participant_id || !draft.place || !Number.isInteger(Number(draft.place)) || Number(draft.place) < 1) { setError("Choose a participant and a whole-number placement greater than zero."); return; }
     const { error: e } = await db.from("game_round_placements").insert({
       round_id: round.id,
@@ -765,6 +762,9 @@ function App() {
   })).sort((a, b) => b.count - a.count || a.title.localeCompare(b.title)), [games, votes, participantId]);
   const max = Math.max(1, ...ranked.map(g => g.count));
   const pendingRequests = linkRequests.filter(r => r.status === "pending");
+  const goingCount = attendance.filter(x => x.status === "going").length;
+  const maybeCount = attendance.filter(x => x.status === "maybe").length;
+  const notGoingCount = attendance.filter(x => x.status === "not_going").length;
   const activeParticipants = participants.filter(p => p.is_active !== false);
 
   if (!db) return <div className="setup"><div className="setup-card"><div className="brand-icon"><Gamepad2/></div><h1>Connect your game night board</h1><p>Copy <code>.env.example</code> to <code>.env.local</code>, add your Supabase project URL and anon key, then run the SQL in <code>supabase/schema.sql</code>. Full instructions are in README.md.</p></div></div>;
@@ -773,7 +773,7 @@ function App() {
   return <main className="shell">
     <header className="topbar"><a className="brand" href="#"><span className="brand-icon"><Gamepad2 size={21}/></span> GAME NIGHT</a><div className="top-actions">{name && <button className={"admin-mode-toggle account-mode-toggle "+(accountMode?"active":"")} onClick={()=>{setAccountMode(v=>!v);setError("");setNotice("");}}><Settings size={14}/>{accountMode?"Back to game night":"Account"}</button>}{isAdmin && <button className={"admin-mode-toggle "+(adminMode?"active":"")} onClick={()=>setAdminMode(v=>!v)}><Shield size={14}/>{adminMode?"Switch to normal mode":"Switch to admin mode"}</button>}{name && <button className="quiet" onClick={switchName}><LogOut size={15}/> Logout</button>}</div></header>
     <section className="hero">
-      <div className="hero-copy"><div className="eyebrow"><Sparkles size={14}/> LET'S PICK THE NEXT GAME</div><h1>{(settings?.event_title || "Saturday Game Night").replace(/\s+/, " ").split(" ").slice(0, -1).join(" ") || "Saturday"}<br/><em>{(settings?.event_title || "Saturday Game Night").split(" ").slice(-1)[0]}.</em></h1><p>Bring your best ideas. Vote for the games you want to play.</p><div className="event-meta"><span><CalendarDays size={16}/> {displayEventDate(settings?.event_date)}</span><span><Clock3 size={16}/> {settings?.event_time || "7:00 PM"}</span>{settings?.location && <span><MapPin size={16}/> {settings.location}</span>}</div></div>
+      <div className="hero-copy"><div className="eyebrow"><Sparkles size={14}/> LET'S PICK THE NEXT GAME</div><h1>{(settings?.event_title || "Saturday Game Night").replace(/\s+/, " ").split(" ").slice(0, -1).join(" ") || "Saturday"}<br/><em>{(settings?.event_title || "Saturday Game Night").split(" ").slice(-1)[0]}.</em></h1><p>Bring your best ideas. Vote for the games you want to play.</p><div className="event-meta"><span><CalendarDays size={16}/> {displayEventDate(settings?.event_date)}</span><span><Clock3 size={16}/> {settings?.event_time || "7:00 PM"}</span>{settings?.location && <span><MapPin size={16}/> {settings.location}</span>}</div><div className="event-switcher"><button className="secondary event-calendar-trigger" onClick={() => setCalendarOpen(v => !v)}><CalendarDays size={16}/> Choose Game Night <ChevronDown size={14}/></button>{calendarOpen && <div className="event-calendar"><div className="calendar-heading"><button className="icon-action" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()-1,1))}>‹</button><b>{calendarMonth.toLocaleDateString("en-US",{month:"long",year:"numeric"})}</b><button className="icon-action" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(),calendarMonth.getMonth()+1,1))}>›</button></div><div className="calendar-grid">{["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => <span className="calendar-weekday" key={d}>{d}</span>)}{calendarDays.map((day,i) => {const date=day?calendarMonth.getFullYear()+"-"+String(calendarMonth.getMonth()+1).padStart(2,"0")+"-"+String(day).padStart(2,"0"):null;const event=gameNights.find(x=>x.event_date===date);return <button key={i} disabled={!event} className={"calendar-day"+(event?" has-event":"")+(event?.id===selectedEventId?" selected":"")} onClick={() => event&&selectGameNight(event.id)}>{day||""}</button>;})}</div><small>Only dates created by an admin can be selected.</small></div>}</div>{settings?.is_archived && <div className="archived-banner">ARCHIVED GAME NIGHT · VIEW ONLY</div>}</div>
       <div className="hero-graphic"><div className="halo"/><Gamepad2 size={178} strokeWidth={1.1}/><b>✦</b></div>
     </section>
 
@@ -793,7 +793,7 @@ function App() {
         <section className="panel account-password-panel"><div className="panel-title"><div><small>SECURITY</small><h2>Change password</h2></div><span className="tile"><Shield size={18}/></span></div><p className="muted">Enter your current password, then choose a new password. Other devices will need to sign in again using the new password.</p><form className="change-password-form" onSubmit={changeMyPassword}><label>Current password<input type="password" value={currentPasswordDraft} onChange={e=>setCurrentPasswordDraft(e.target.value)} autoComplete="current-password" required/></label><label>New password<input type="password" value={newPasswordDraft} onChange={e=>setNewPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/><small>At least 8 characters.</small></label><label>Confirm new password<input type="password" value={confirmPasswordDraft} onChange={e=>setConfirmPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/></label><button className="primary" type="submit" disabled={busy || !currentPasswordDraft || newPasswordDraft.length<8 || !confirmPasswordDraft}>{busy ? "Updating…" : "Update password"}</button></form></section>
         {isAdmin && <p className="muted account-admin-hint">Administrator settings are available when you return to the game night board with admin mode enabled.</p>}
       </> : <>
-      <div className="welcome"><div><small>YOU'RE IN</small><h2>Hey, {name} ✌️</h2></div><span className="live"><i/> LIVE BOARD</span></div>
+      <div className="welcome"><div><small>YOU'RE IN</small><h2>Hey, {name} ✌️</h2></div><span className="live"><i/> LIVE BOARD</span></div><section className="panel attendance-panel"><div className="panel-title"><div><small>THIS GAME NIGHT</small><h2>Attendance</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Let everyone know whether you are joining this date.</p><div className="attendance-actions">{[["going","Going"],["maybe","Maybe"],["not_going","Not Going"]].map(([value,label]) => <button key={value} className={"secondary"+(myAttendance===value?" selected":"")} disabled={busy||settings?.is_archived} onClick={() => setEventAttendance(value)}>{myAttendance===value?"✓ ":""}{label}</button>)}</div><div className="attendance-summary"><span><b>{goingCount}</b> Going</span><span><b>{maybeCount}</b> Maybe</span><span><b>{notGoingCount}</b> Not Going</span></div><div className="attendance-list">{attendance.map(item => <span key={item.id}>{participants.find(p=>p.id===item.participant_id)?.name||"Participant"} · {item.status==="not_going"?"Not Going":item.status[0].toUpperCase()+item.status.slice(1)}</span>)}</div></section>
       <section className="stats">
         <div className="stat"><Gamepad2/><strong>{games.length}</strong><span>Games suggested</span></div>
         <div className="stat"><ThumbsUp/><strong>{votes.length}</strong><span>Total votes</span></div>
@@ -806,7 +806,7 @@ function App() {
         </section>
         <section className="panel voting"><div className="panel-title"><div><small>THE COMMUNITY PICKS</small><h2>Vote for games</h2></div><span className="tile gold"><Trophy/></span></div><p className="instruction"><i/> Vote for every game you'd like to play.</p>
           {!settings?.voting_open && <div className="closed">Voting is currently closed.</div>}
-          {!ranked.length ? <div className="empty"><Gamepad2 size={28}/><b>No games yet</b><span>Be the first to suggest one!</span></div> : <div className="game-list">{ranked.map((g,i)=><article className="game" key={g.id}><div className="rank">{i===0 && g.count ? <Trophy size={16}/> : String(i+1).padStart(2,"0")}</div><div className="game-info"><div className="game-heading"><b>{g.title}</b>{i===0 && g.count>0 && <small>LEADING</small>}</div>{g.description && <p>{g.description}</p>}<div className="byline">Suggested by {participants.find(p=>p.id===g.suggested_by)?.name || "a participant"}</div><div className="bar"><span style={{width:(g.count/max*100)+"%"}}/></div></div><div className="game-actions">{showAdminControls && <button className="icon-action" title="Edit game" onClick={()=>updateGame(g)}><Pencil size={14}/></button>}{showAdminControls && <button className="icon-action danger" title="Delete game" onClick={()=>deleteGame(g)}><Trash2 size={14}/></button>}<button className={"vote "+(g.mine?"selected":"")} onClick={()=>vote(g.id)} disabled={busy || !settings?.voting_open}>{g.mine?<Check size={16}/>:<ThumbsUp size={16}/>}<b>{g.count}</b></button></div></article>)}</div>}
+          {!ranked.length ? <div className="empty"><Gamepad2 size={28}/><b>No games yet</b><span>Be the first to suggest one!</span></div> : <div className="game-list">{ranked.map((g,i)=><article className="game" key={g.id}><div className="rank">{i===0 && g.count ? <Trophy size={16}/> : String(i+1).padStart(2,"0")}</div><div className="game-info"><div className="game-heading"><b>{g.title}</b>{i===0 && g.count>0 && <small>LEADING</small>}</div>{g.description && <p>{g.description}</p>}<div className="byline">Suggested by {participants.find(p=>p.id===g.suggested_by)?.name || "a participant"}</div><div className="bar"><span style={{width:(g.count/max*100)+"%"}}/></div></div><div className="game-actions">{showAdminControls && <button className="icon-action" title="Edit game" onClick={()=>updateGame(g)}><Pencil size={14}/></button>}{showAdminControls && <button className="icon-action danger" title="Delete game" onClick={()=>deleteGame(g)}><Trash2 size={14}/></button>}<button className={"vote "+(g.mine?"selected":"")} onClick={()=>vote(g.id)} disabled={busy || !settings?.voting_open || settings?.is_archived}>{g.mine?<Check size={16}/>:<ThumbsUp size={16}/>}<b>{g.count}</b></button></div></article>)}</div>}
           <div className="footnote">You can change your vote anytime while voting is open.</div>
         </section>
       </div>
@@ -835,7 +835,7 @@ function App() {
       </section>
 
       {showAdminControls && <section className="panel admin-panel"><div className="panel-title"><div><small>ADMINISTRATION</small><h2>Admin controls</h2></div><span className="tile"><Shield/></span></div>
-        <div className="admin-section"><h3><CalendarDays size={16}/> Game night details</h3><p className="muted">Set the title, date, start time, and location shown to everyone on the game night board.</p><div className="event-details-form"><label>Game night title<input value={eventTitleDraft} onChange={e=>setEventTitleDraft(e.target.value)} placeholder="Enter game night title" maxLength={80} required/></label><label>Game night date<input type="date" value={eventDateDraft} onChange={e=>setEventDateDraft(e.target.value)} required/></label><label>Start time<input type="time" value={eventTimeDraft} onChange={e=>setEventTimeDraft(e.target.value)} required/></label><label className="event-location-field">Location<input value={eventLocationDraft} onChange={e=>setEventLocationDraft(e.target.value)} placeholder="Enter address, venue, or meeting place" maxLength={240}/></label><button className="primary" onClick={saveEventDetails} disabled={busy || !eventDateDraft || !eventTimeDraft}>Save game night details</button></div></div>
+        <div className="admin-section"><h3><CalendarDays size={16}/> Manage Game Nights</h3><p className="muted">Create dates, duplicate a previous game setup, and archive or reopen events. Each date has its own games, scoreboard, attendance, and chat.</p><div className="event-details-form"><label>New Game Night title<input value={newEventTitle} onChange={e=>setNewEventTitle(e.target.value)} maxLength={80}/></label><label>New date<input type="date" value={newEventDate} onChange={e=>setNewEventDate(e.target.value)}/></label><label>Start time<input type="time" value={newEventTime} onChange={e=>setNewEventTime(e.target.value)}/></label><label>Location<input value={newEventLocation} onChange={e=>setNewEventLocation(e.target.value)} maxLength={240}/></label><button className="primary" disabled={busy||!newEventDate||!newEventTime} onClick={createGameNight}>Create blank Game Night</button><label>Duplicate game setup from<select value={duplicateFromEventId} onChange={e=>setDuplicateFromEventId(e.target.value)}><option value="">Choose an existing Game Night</option>{gameNights.map(event=><option key={event.id} value={event.id}>{event.event_title} · {event.event_date}</option>)}</select></label><button className="secondary" disabled={busy||!newEventDate||!newEventTime||!duplicateFromEventId} onClick={duplicateGameNight}>Create and duplicate setup</button></div><div className="event-admin-list">{gameNights.map(event=><div className="event-admin-row" key={event.id}><div><b>{event.event_title}</b><small>{displayEventDate(event.event_date)} · {event.event_time}{event.is_archived?" · Archived":""}</small></div><button className="secondary" onClick={() => selectGameNight(event.id)}>View</button><button className="secondary" onClick={() => archiveGameNight(event)}>{event.is_archived?"Reopen":"Archive"}</button></div>)}</div></div><div className="admin-section"><h3><CalendarDays size={16}/> Selected Game Night details</h3><p className="muted">Edit the selected date title, date, time, and location.</p><div className="event-details-form"><label>Game night title<input value={eventTitleDraft} onChange={e=>setEventTitleDraft(e.target.value)} placeholder="Enter game night title" maxLength={80} required/></label><label>Game night date<input type="date" value={eventDateDraft} onChange={e=>setEventDateDraft(e.target.value)} required/></label><label>Start time<input type="time" value={eventTimeDraft} onChange={e=>setEventTimeDraft(e.target.value)} required/></label><label className="event-location-field">Location<input value={eventLocationDraft} onChange={e=>setEventLocationDraft(e.target.value)} placeholder="Enter address, venue, or meeting place" maxLength={240}/></label><button className="primary" onClick={saveEventDetails} disabled={busy || !eventDateDraft || !eventTimeDraft || settings?.is_archived}>Save game night details</button></div></div>
         <div className="admin-section"><h3><Shield size={16}/> Group password</h3><p className="muted">Set or replace the password required for new participant accounts. Existing participants stay signed in.</p><div className="admin-password-form"><input type="password" value={adminGroupPassword} onChange={e=>setAdminGroupPassword(e.target.value)} placeholder="New group password (6+ characters)" minLength={6} maxLength={200} autoComplete="new-password"/><button className="primary" disabled={adminGroupPassword.trim().length < 6} onClick={saveGroupPassword}>Save group password</button></div></div>
         <div className="admin-setting"><div><b>Voting status</b><p>{settings?.voting_open ? "Participants can currently vote." : "Voting is closed for everyone."}</p></div><button className="primary" onClick={toggleVoting}>{settings?.voting_open ? "Close voting" : "Open voting"}</button></div>
         <div className="admin-section"><h3><Shield size={16}/> Administrator access</h3><p className="muted">Promote trusted participants to admins. Admins can manage the board and other admin accounts. The last admin cannot be removed.</p>
@@ -850,7 +850,7 @@ function App() {
       </section>}
       </>}
     </>}
-    {session && participantId && name && !accountMode && <section className={"panel game-chat-panel"+(chatExpanded?" expanded":"")}><div className="panel-title"><div><small>THE GROUP CHAT</small><h2>Game Night Chat</h2></div><button type="button" className="chat-toggle secondary" onClick={()=>setChatExpanded(v=>!v)}>{chatExpanded?"Show latest 3":"View chat history"}</button></div><p className="muted">Send a message to everyone in the group.</p><div className="chat-message-list" aria-live="polite">{chatMessages.length ? (chatExpanded ? chatMessages : chatMessages.slice(-3)).map(msg=><article className={"chat-message"+(msg.participant_id===participantId?" own":"")} key={msg.id}><div className="chat-message-meta"><b>{msg.sender_name}</b><time dateTime={msg.created_at}>{formatChatTimestamp(msg.created_at)}</time></div><p>{msg.message}</p></article>) : <p className="chat-empty">No messages yet. Start the conversation!</p>}</div><form className="chat-compose" onSubmit={sendChatMessage}><textarea value={chatDraft} onChange={e=>setChatDraft(e.target.value)} maxLength={1000} rows={2} placeholder="Write a message..." aria-label="Chat message" required/><button className="primary" disabled={busy || !chatDraft.trim()}>Send message</button></form></section>}
+    {session && participantId && name && !accountMode && <section className={"panel game-chat-panel"+(chatExpanded?" expanded":"")}><div className="panel-title"><div><small>THE GROUP CHAT</small><h2>Game Night Chat</h2></div><button type="button" className="chat-toggle secondary" onClick={()=>setChatExpanded(v=>!v)}>{chatExpanded?"Show latest 3":"View chat history"}</button></div><p className="muted">Send a message to everyone in the group.</p><div className="chat-message-list" aria-live="polite">{chatMessages.length ? (chatExpanded ? chatMessages : chatMessages.slice(-3)).map(msg=><article className={"chat-message"+(msg.participant_id===participantId?" own":"")} key={msg.id}><div className="chat-message-meta"><b>{msg.sender_name}</b><time dateTime={msg.created_at}>{formatChatTimestamp(msg.created_at)}</time></div><p>{msg.message}</p></article>) : <p className="chat-empty">No messages yet. Start the conversation!</p>}</div><form className="chat-compose" onSubmit={sendChatMessage}><textarea value={chatDraft} onChange={e=>setChatDraft(e.target.value)} maxLength={1000} rows={2} placeholder={settings?.is_archived?"Archived chat is read-only":"Write a message..."} aria-label="Chat message" required disabled={settings?.is_archived}/><button className="primary" disabled={busy || !chatDraft.trim() || settings?.is_archived}>Send message</button></form></section>}
     {(error||notice)&&<div className={"toast "+(error?"bad":"")}>{error||notice}<button onClick={()=>{setError("");setNotice("");}}>×</button></div>}
     <footer><span>MADE BY PETER TRAN.</span><button onClick={refresh}><RefreshCw size={13}/> Refresh board</button></footer>
   </main>;
