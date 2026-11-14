@@ -137,3 +137,8 @@ returns void language sql security invoker set search_path = ''
 as $$ select private.admin_reset_participant_password(p_participant_id, p_password); $$;
 revoke all on function public.admin_reset_participant_password(uuid, text) from public;
 grant execute on function public.admin_reset_participant_password(uuid, text) to authenticated;
+
+-- Legacy admin approval must not bypass participant password verification.
+revoke execute on function public.admin_decide_participant_link_request(bigint, boolean) from public;
+revoke execute on function public.admin_decide_participant_link_request(bigint, boolean) from anon;
+revoke execute on function public.admin_decide_participant_link_request(bigint, boolean) from authenticated;
