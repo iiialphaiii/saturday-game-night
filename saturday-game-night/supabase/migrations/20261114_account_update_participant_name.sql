@@ -5,6 +5,24 @@ on public.participants (
   lower(regexp_replace(btrim(name), '[[:space:]]+', ' ', 'g'))
 );
 
+create or replace function private.protect_participant_name()
+returns trigger
+language plpgsql
+set search_path = ''
+as $function$
+begin
+  if new.name is distinct from old.name
+     and coalesce((auth.jwt()->'app_metadata'->>'role'), '') <> 'admin'
+     and not (
+       current_setting('app.allow_participant_name_update', true) = 'true'
+       and auth.uid() = private.current_participant_id()
+     ) then
+    raise exception 'Participant names can only be changed by the profile owner or an administrator.';
+  end if;
+  return new;
+end;
+$function$;
+
 create or replace function private.update_my_participant_name(p_name text)
 returns void
 language plpgsql
@@ -31,6 +49,7 @@ begin
     raise exception 'That name is already in use. Please choose another name.';
   end if;
 
+  perform set_config('app.allow_participant_name_update', 'true', true);
   update public.participants set name = v_name where id = v_participant_id;
   if not found then raise exception 'Participant profile not found.'; end if;
 exception
