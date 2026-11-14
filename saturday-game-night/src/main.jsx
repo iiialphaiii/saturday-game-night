@@ -39,9 +39,14 @@ function App() {
 
   useEffect(() => {
     if (!db) { setLoading(false); return; }
-    db.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      if (!data.session) setLoading(false);
+    db.auth.getSession().then(async ({ data }) => {
+      let current = data.session;
+      if (current) {
+        const { data: refreshed } = await db.auth.refreshSession();
+        current = refreshed.session || current;
+      }
+      setSession(current);
+      if (!current) setLoading(false);
     });
     const { data: listener } = db.auth.onAuthStateChange((_event, s) => {
       setSession(s);
@@ -312,7 +317,7 @@ function App() {
   if (loading) return <div className="setup"><div className="setup-card"><div className="brand-icon"><Gamepad2/></div><h1>Loading game night…</h1></div></div>;
 
   return <main className="shell">
-    <header className="topbar"><a className="brand" href="#"><span className="brand-icon"><Gamepad2 size={21}/></span> GAME NIGHT</a><div className="top-actions">{isAdmin && <span className="admin-chip"><Shield size={13}/> ADMIN</span>}{name && <button className="quiet" onClick={switchName}><LogOut size={15}/> Switch name</button>}</div></header>
+    <header className="topbar"><a className="brand" href="#"><span className="brand-icon"><Gamepad2 size={21}/></span> GAME NIGHT</a><div className="top-actions">{isAdmin && <span className="admin-chip"><Shield size={13}/> ADMIN</span>}{name && !isAdmin && <button className="quiet" onClick={switchName}><LogOut size={15}/> Switch name</button>}</div></header>
     <section className="hero">
       <div className="hero-copy"><div className="eyebrow"><Sparkles size={14}/> LET'S PICK THE NEXT GAME</div><h1>Saturday<br/><em>Game Night.</em></h1><p>Bring your best ideas. Vote for the games you want to play.</p><div className="event-meta"><span><CalendarDays size={16}/> {settings?.event_date || "Saturday, November 14, 2026"}</span><span><Clock3 size={16}/> {settings?.event_time || "7:00 PM"}</span></div></div>
       <div className="hero-graphic"><div className="halo"/><Gamepad2 size={178} strokeWidth={1.1}/><b>✦</b></div>
