@@ -882,7 +882,7 @@ function App() {
       <section className="stats">
         <div className="stat"><Gamepad2/><strong>{games.length}</strong><span>Games suggested</span></div>
         <div className="stat"><ThumbsUp/><strong>{votes.length}</strong><span>Total votes</span></div>
-        <div className="stat"><Users/><strong>{activeParticipants.length}</strong><span>People joining</span></div>
+        <div className="stat"><Users/><strong>{goingParticipants.length}</strong><span>People joining</span></div>
       </section>
       <div className="columns">
         <section className="panel suggest"><div className="panel-title"><div><small>ADD TO THE LINEUP</small><h2>Suggest a game</h2></div><span className="tile"><Plus/></span></div><p>Got a game everyone should try? Put it up for a vote.</p>
