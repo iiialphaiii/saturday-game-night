@@ -75,6 +75,7 @@ function App() {
   const [arrivalTime, setArrivalTime] = useState("");
   const [participantId, setParticipantId] = useState(null);
   const [participants, setParticipants] = useState([]);
+  const [eventArrivals, setEventArrivals] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatDraft, setChatDraft] = useState("");
   const [chatExpanded, setChatExpanded] = useState(false);
@@ -161,6 +162,7 @@ function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "participant_link_requests" }, refresh)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "game_chat_messages" }, () => loadChatMessages())
       .on("postgres_changes", { event: "*", schema: "public", table: "game_attendance" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_event_arrivals" }, refresh)
       .subscribe();
     return () => db.removeChannel(channel);
   }, [session, selectedEventId]);
@@ -198,18 +200,19 @@ function App() {
     if (current.data) {
       setParticipantId(current.data);
       const me=p.data?.find(x=>x.id===current.data);
-      if(me){setName(me.name);setNameInput(me.name);setParticipantNameDraft(me.name);setParticipantSloganDraft(me.slogan||"");setArrivalTime(toInputTime(me.arrival_time));}
+      if(me){setName(me.name);setNameInput(me.name);setParticipantNameDraft(me.name);setParticipantSloganDraft(me.slogan||"");}
       else setName("");
     }
     if (!activeId) {
       setSettings(null);setGames([]);setVotes([]);setRounds([]);setPlacements([]);setAttendance([]);setChatMessages([]);setLoading(false);return;
     }
-    const [eventResult,gamesResult,attendanceResult] = await Promise.all([
+    const [eventResult,gamesResult,attendanceResult,arrivalResult] = await Promise.all([
       db.from("game_nights").select("*").eq("id",activeId).maybeSingle(),
       db.from("games").select("*").eq("event_id",activeId).order("created_at",{ascending:false}),
-      db.from("game_attendance").select("*").eq("event_id",activeId)
+      db.from("game_attendance").select("*").eq("event_id",activeId),
+      db.from("game_event_arrivals").select("*").eq("event_id",activeId)
     ]);
-    const issue2=[eventResult,gamesResult,attendanceResult].find(x=>x.error);
+    const issue2=[eventResult,gamesResult,attendanceResult,arrivalResult].find(x=>x.error);
     if(issue2) setError(issue2.error.message);
     const eventGames=gamesResult.data||[], gameIds=eventGames.map(g=>g.id);
     const [votesResult,roundsResult] = gameIds.length ? await Promise.all([
@@ -230,6 +233,9 @@ function App() {
     }
     setGames(eventGames);setVotes(votesResult.data||[]);setRounds(roundsResult.data||[]);setPlacements(placementsResult.data||[]);
     setAttendance(attendanceResult.data||[]);
+    setEventArrivals(arrivalResult.data||[]);
+    const myArrival=(arrivalResult.data||[]).find(x=>x.participant_id===current.data);
+    setArrivalTime(toInputTime(myArrival?.arrival_time));
     setMyAttendance((attendanceResult.data||[]).find(x=>x.participant_id===current.data)?.status||"");
     await loadChatMessages(activeId);
     setLoading(false);
@@ -382,7 +388,8 @@ function App() {
       if (ownError) throw ownError;
       if (ownProfile) {
         if (!arrivalTime) throw new Error("Please select your arrival time.");
-        const { error: updateError } = await db.from("participants").update({ arrival_time: formatTime(arrivalTime) }).eq("id", id);
+        if (!selectedEventId) throw new Error("Please select a Game Night first.");
+        const { error: updateError } = await db.from("game_event_arrivals").upsert({ event_id: selectedEventId, participant_id: id, arrival_time: formatTime(arrivalTime) }, { onConflict: "event_id,participant_id" });
         if (updateError) throw updateError;
         setName(ownProfile.name); setParticipantId(id); setParticipantPassword("");
         setNotice("Your arrival time has been updated.");
@@ -815,7 +822,7 @@ function App() {
       </div>
 
       <section className="panel crew"><div className="crew-head"><div><small>THE CREW</small><h2>Who's playing?</h2></div><span>{activeParticipants.length} {activeParticipants.length===1?"person":"people"}</span></div>
-        <div className="people">{activeParticipants.map((p,i)=><div className="person" key={p.id}><span className={"avatar a"+(i%5)}>{p.name.charAt(0).toUpperCase()}</span><span className="person-detail"><b>{p.name}{p.id===participantId && <em>YOU</em>}{p.slogan && <span className="person-slogan"> · {p.slogan}</span>}<span className="person-role">{displayRoles.find(r => r.participant_id === p.id)?.role_label || "Participant"}</span></b><small><Clock3 size={12}/> Arriving at {p.arrival_time || "Time not confirmed"}</small></span></div>)}</div>
+        <div className="people">{activeParticipants.map((p,i)=><div className="person" key={p.id}><span className={"avatar a"+(i%5)}>{p.name.charAt(0).toUpperCase()}</span><span className="person-detail"><b>{p.name}{p.id===participantId && <em>YOU</em>}{p.slogan && <span className="person-slogan"> · {p.slogan}</span>}<span className="person-role">{displayRoles.find(r => r.participant_id === p.id)?.role_label || "Participant"}</span></b><small><Clock3 size={12}/> Arriving at {eventArrivals.find(x=>x.participant_id===p.id)?.arrival_time || "TBD Pending..."}</small></span></div>)}</div>
         <form className="arrival-update" onSubmit={join}><label>Update your arrival time<ArrivalTimePicker value={arrivalTime} onChange={setArrivalTime}/><small>{arrivalTime ? "Current saved time: " + formatTime(arrivalTime) : "Please select a time."}</small></label><button className="secondary" disabled={busy}>Save arrival time</button></form>
       </section>
       <section className={"panel history "+(scoreboardMode?"scoreboard-editing":"")}><div className="crew-head"><div><small>THE SCOREBOARD</small><h2>Game round history</h2></div><div className="scoreboard-heading-actions"><span>{rounds.length} rounds recorded</span><button className={"admin-mode-toggle scoreboard-edit-button "+(scoreboardMode?"active":"")} onClick={toggleScoreboardEditing} disabled={busy || settings?.is_archived}><Trophy size={14}/>{scoreboardMode?"Done editing":"Edit scoreboard"}</button></div></div>{scoreboardMode && <p className="scoreboard-edit-hint">Editing mode is on. Open a game below to add rounds or update placements and scores.</p>}
