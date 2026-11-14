@@ -281,7 +281,7 @@ function App() {
 
   async function addPlacement(round) {
     const draft = placementDrafts[round.id] || {};
-    if (!draft.participant_id || !draft.place) { setError("Choose a participant and placement."); return; }
+    if (!draft.participant_id || !draft.place || !Number.isInteger(Number(draft.place)) || Number(draft.place) < 1) { setError("Choose a participant and a whole-number placement greater than zero."); return; }
     const { error: e } = await db.from("game_round_placements").insert({
       round_id: round.id,
       participant_id: draft.participant_id,
