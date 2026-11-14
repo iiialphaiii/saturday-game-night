@@ -176,15 +176,18 @@ function App() {
 
   function toInputTime(value) {
     if (!value || value === "TBD Pending...") return "";
-    const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    // Supabase TIME columns commonly return HH:MM:SS; text values may use AM/PM.
+    const match = String(value).trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
     if (!match) return "";
     let hour = Number(match[1]);
-    const minute = match[2];
-    const suffix = match[3]?.toUpperCase();
+    const minute = Number(match[2]);
+    const second = match[3] == null ? 0 : Number(match[3]);
+    const suffix = match[4]?.toUpperCase();
+    if (suffix && (hour < 1 || hour > 12)) return "";
     if (suffix === "PM" && hour < 12) hour += 12;
     if (suffix === "AM" && hour === 12) hour = 0;
-    if (hour > 23 || Number(minute) > 59) return "";
-    return String(hour).padStart(2, "0") + ":" + minute;
+    if (hour > 23 || minute > 59 || second > 59) return "";
+    return String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0");
   }
   function toInputEventTime(value) {
     if (!value) return "19:00";
