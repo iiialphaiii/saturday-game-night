@@ -9,3 +9,5 @@
 @media(max-width:600px){.admin-setting,.request-row{align-items:flex-start;flex-direction:column}.request-row .request-actions{width:100%;justify-content:flex-start}.placement-form>*{flex:1 1 40%}.new-round input{flex-basis:100%}.locked-name{align-self:flex-start}}
 
 .admin-password-form{display:flex;gap:9px;align-items:center;margin-top:12px}.admin-password-form input{flex:1;min-width:0;border:1px solid #353849;border-radius:8px;background:#0e1018;color:#fff;padding:11px;font:12px 'DM Sans';outline:none}.admin-password-form input:focus{border-color:#927cff}.admin-password-form .primary{white-space:nowrap}@media(max-width:600px){.admin-password-form{align-items:stretch;flex-direction:column}.admin-password-form>*{width:100%}}
+
+.round-title{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0}.round-title>span{font-size:10px;color:#8e93a4}.round-actions,.result-actions{display:flex;align-items:center;gap:6px;flex:none}.round-heading{align-items:flex-start}.placement-list li .result-actions{margin-left:auto}.placement-list li .result-actions .icon-action{margin-left:0}
