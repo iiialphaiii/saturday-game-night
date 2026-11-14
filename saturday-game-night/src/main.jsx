@@ -57,7 +57,7 @@ function App() {
   const isAdmin = session?.user?.app_metadata?.role === "admin";
   const isGameAdmin = session?.user?.app_metadata?.role === "game_admin";
   const showAdminControls = isAdmin && adminMode;
-  const canManageScoreboard = showAdminControls || (isGameAdmin && scoreboardMode);
+  const canManageScoreboard = showAdminControls || (scoreboardMode && (isGameAdmin || isAdmin));
 
   useEffect(() => {
     if (!db) { setLoading(false); return; }
@@ -454,6 +454,32 @@ function App() {
     else { setNotice(person.name + (makeAdmin ? " is now an administrator." : " is no longer an administrator.")); await db.auth.refreshSession(); await refresh(); }
   }
 
+  async function toggleScoreboardEditing() {
+    if (scoreboardMode) {
+      setScoreboardMode(false);
+      setNotice("Scoreboard editing is off.");
+      setError("");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const { data, error: refreshError } = await db.auth.refreshSession();
+      if (refreshError) throw refreshError;
+      const current = data.session || session;
+      if (current) setSession(current);
+      const role = current?.user?.app_metadata?.role;
+      if (role !== "game_admin" && role !== "admin") {
+        throw new Error("You do not have Game Admin access. Ask a full administrator to promote your account, then sign in again.");
+      }
+      setScoreboardMode(true);
+      setNotice("Scoreboard editing is on. You can now add, edit, and remove rounds and results.");
+    } catch (err) {
+      setError(err.message || "Unable to enable scoreboard editing.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function setParticipantGameAdmin(person, makeGameAdmin) {
     const { error: e } = await db.rpc("admin_set_participant_game_admin", {
       p_participant_id: person.id, p_make_game_admin: makeGameAdmin
@@ -594,7 +620,7 @@ function App() {
   if (loading) return <div className="setup"><div className="setup-card"><div className="brand-icon"><Gamepad2/></div><h1>Loading game night…</h1></div></div>;
 
   return <main className="shell">
-    <header className="topbar"><a className="brand" href="#"><span className="brand-icon"><Gamepad2 size={21}/></span> GAME NIGHT</a><div className="top-actions">{name && <button className={"admin-mode-toggle account-mode-toggle "+(accountMode?"active":"")} onClick={()=>{setAccountMode(v=>!v);setError("");setNotice("");}}><Settings size={14}/>{accountMode?"Back to game night":"Account"}</button>}{isAdmin && <button className={"admin-mode-toggle "+(adminMode?"active":"")} onClick={()=>setAdminMode(v=>!v)}><Shield size={14}/>{adminMode?"Switch to normal mode":"Switch to admin mode"}</button>}{isGameAdmin && <button className={"admin-mode-toggle scoreboard-mode-toggle "+(scoreboardMode?"active":"")} onClick={()=>{setScoreboardMode(v=>!v);setError("");setNotice("");}}><Trophy size={14}/>{scoreboardMode?"Done editing scoreboard":"Edit scoreboard"}</button>}{name && <button className="quiet" onClick={switchName}><LogOut size={15}/> Logout</button>}</div></header>
+    <header className="topbar"><a className="brand" href="#"><span className="brand-icon"><Gamepad2 size={21}/></span> GAME NIGHT</a><div className="top-actions">{name && <button className={"admin-mode-toggle account-mode-toggle "+(accountMode?"active":"")} onClick={()=>{setAccountMode(v=>!v);setError("");setNotice("");}}><Settings size={14}/>{accountMode?"Back to game night":"Account"}</button>}{isAdmin && <button className={"admin-mode-toggle "+(adminMode?"active":"")} onClick={()=>setAdminMode(v=>!v)}><Shield size={14}/>{adminMode?"Switch to normal mode":"Switch to admin mode"}</button>}{name && <button className="quiet" onClick={switchName}><LogOut size={15}/> Logout</button>}</div></header>
     <section className="hero">
       <div className="hero-copy"><div className="eyebrow"><Sparkles size={14}/> LET'S PICK THE NEXT GAME</div><h1>{(settings?.event_title || "Saturday Game Night").replace(/\s+/, " ").split(" ").slice(0, -1).join(" ") || "Saturday"}<br/><em>{(settings?.event_title || "Saturday Game Night").split(" ").slice(-1)[0]}.</em></h1><p>Bring your best ideas. Vote for the games you want to play.</p><div className="event-meta"><span><CalendarDays size={16}/> {displayEventDate(settings?.event_date)}</span><span><Clock3 size={16}/> {settings?.event_time || "7:00 PM"}</span>{settings?.location && <span><MapPin size={16}/> {settings.location}</span>}</div></div>
       <div className="hero-graphic"><div className="halo"/><Gamepad2 size={178} strokeWidth={1.1}/><b>✦</b></div>
@@ -638,7 +664,7 @@ function App() {
         <div className="people">{activeParticipants.map((p,i)=><div className="person" key={p.id}><span className={"avatar a"+(i%5)}>{p.name.charAt(0).toUpperCase()}</span><span className="person-detail"><b>{p.name}{p.id===participantId && <em>YOU</em>}{p.slogan && <span className="person-slogan"> · {p.slogan}</span>}</b><small><Clock3 size={12}/> Arriving at {p.arrival_time || "Time not confirmed"}</small></span></div>)}</div>
         <form className="arrival-update" onSubmit={join}><label>Update your arrival time<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)}/></label><button className="secondary" disabled={busy}>Save arrival time</button></form>
       </section>
-      <section className="panel history"><div className="crew-head"><div><small>THE SCOREBOARD</small><h2>Game round history</h2></div><span>{rounds.length} rounds recorded</span></div>
+      <section className={"panel history "+(scoreboardMode?"scoreboard-editing":"")}><div className="crew-head"><div><small>THE SCOREBOARD</small><h2>Game round history</h2></div><div className="scoreboard-heading-actions"><span>{rounds.length} rounds recorded</span><button className={"admin-mode-toggle scoreboard-edit-button "+(scoreboardMode?"active":"")} onClick={toggleScoreboardEditing} disabled={busy}><Trophy size={14}/>{scoreboardMode?"Done editing":"Edit scoreboard"}</button></div></div>{scoreboardMode && <p className="scoreboard-edit-hint">Editing mode is on. Open a game below to add rounds or update placements and scores.</p>}
         {games.map(game => {
           const gameRounds = rounds.filter(r => r.game_id === game.id).sort((a,b)=>a.round_number-b.round_number);
           return <div className="history-game" key={game.id}><div className="history-game-head"><b>{game.title}</b><span>{gameRounds.length} {gameRounds.length===1?"round":"rounds"}</span><button className="text-action" onClick={()=>setExpandedRounds(v=>({...v,[game.id]:!v[game.id]}))}>{expandedRounds[game.id] ? <ChevronUp size={15}/> : <ChevronDown size={15}/>} {expandedRounds[game.id] ? "Hide" : "View"}</button></div>
