@@ -79,10 +79,6 @@ begin
   set failed_attempts = 0, locked_until = null, updated_at = now()
   where auth_user_id = auth.uid();
 
-  -- Other browser/device aliases must authenticate again with the new password.
-  delete from private.participant_aliases
-  where participant_id = v_participant_id and auth_user_id <> auth.uid();
-
   return true;
 end;
 $$;
