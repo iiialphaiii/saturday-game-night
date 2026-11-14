@@ -134,7 +134,7 @@ function App() {
 
   async function join(e) {
     e.preventDefault();
-    const clean = nameInput.trim().replace(/\\s+/g, " ");
+    const clean = nameInput.trim().replace(/\s+/g, " ");
     if (!clean || !arrivalTime || !db) return;
     if (participantPassword.length < 8) { setError("Participant password must be at least 8 characters."); return; }
     setBusy(true); setError(""); setNotice("");
