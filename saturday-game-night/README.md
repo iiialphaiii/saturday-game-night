@@ -47,3 +47,34 @@ The SQL creates the event, participant, game, and vote tables, enables row-level
 - Anonymous sessions are browser/device-specific. If someone clears browser data or switches devices, they may appear as a new participant.
 - The Supabase anon/publishable key is intended for browser use; keep row-level security enabled. Never put a service-role key in this app.
 - This starter app does not include an admin dashboard to close voting. The `event_settings.voting_open` field can be changed to `false` in Supabase Table Editor when you want to close voting.
+
+
+## Admin controls and game history
+
+The feature branch \`feature/admin-round-history\` adds:
+- Administrator-only game editing/deletion, voting open/close, participant name corrections and active-list removal/restoration.
+- Per-game round history with unlimited round numbers, placements (including ties), optional scores, and notes.
+- Case-insensitive, whitespace-normalized participant name matching. A duplicate name cannot create a second participant.
+- A duplicate-name request flow. Selecting an existing name sends an approval request; it does not immediately grant access to another participant's profile.
+- Database-level name protection and normalized-name uniqueness.
+
+### Apply the feature migration to another Supabase project
+
+Run \`supabase/migrations/20261113_game_night_admin_round_history.sql\` in the Supabase SQL Editor. The connected Game Night Supabase project has already received the migration.
+
+### Designate the first administrator
+
+Admin permissions use the trusted \`app_metadata.role = "admin"\` claim, not user-editable profile metadata. First, join the app normally so your participant record exists. Then, in Supabase SQL Editor, replace \`YOUR EXACT PARTICIPANT NAME\` with the exact registered name and run:
+
+\`\`\`sql
+update auth.users u
+set raw_app_meta_data = coalesce(u.raw_app_meta_data, '{}'::jsonb) || '{"role":"admin"}'::jsonb
+from public.participants p
+where p.id = u.id
+  and lower(regexp_replace(btrim(p.name), '\\s+', ' ', 'g')) =
+      lower(regexp_replace(btrim('YOUR EXACT PARTICIPANT NAME'), '\\s+', ' ', 'g'));
+\`\`\`
+
+Sign out and back in (or refresh the anonymous session) after the role change so the new JWT contains the admin claim. Keep admin access limited to trusted organizers.
+
+The app continues to use anonymous sign-in. Because anonymous sessions are device/browser-specific, an existing participant link request requires an administrator to approve the association. An admin should approve only after verifying who is making the request in person or through a trusted channel.
