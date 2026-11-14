@@ -289,7 +289,7 @@ function App() {
       const source=await db.from("games").select("*").eq("event_id",duplicateFromEventId);
       if(source.error) throw source.error;
       for(const game of source.data||[]){
-        const {data:newGame,error:gameError}=await db.from("games").insert({event_id:event.id,title:game.title,description:game.description,suggested_by:game.suggested_by}).select("id").single();
+        const {data:newGame,error:gameError}=await db.from("games").insert({event_id:event.id,title:game.title,description:game.description,suggested_by:participantId}).select("id").single();
         if(gameError) throw gameError;
         const oldRounds=await db.from("game_rounds").select("*").eq("game_id",game.id).order("round_number");
         if(oldRounds.error) throw oldRounds.error;
