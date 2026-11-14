@@ -48,3 +48,14 @@
 @media(max-width:600px){.event-calendar{right:0;left:auto;width:min(330px,calc(100vw - 64px));max-width:calc(100vw - 64px)}}
 
 .vote-audit{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px;padding:8px 9px;border:1px solid #343849;border-radius:7px;background:#191c27;font-size:10px;line-height:1.5;color:#b9bdca}.vote-audit b{color:#e0d7ff;font-weight:700}.vote-audit span{overflow-wrap:anywhere}
+
+.vote-actions{display:flex;gap:6px;align-items:center}
+.vote.vote-up.selected{background:#173d2d;border-color:#329665;color:#7cf0ae}
+.vote.vote-down.selected{background:#47252d;border-color:#a94a5a;color:#ff9ba8}
+.vote-audit{display:grid;gap:8px}
+.vote-audit>div{display:grid;gap:3px;min-width:0}
+.vote-audit b{display:flex;align-items:center;gap:5px}
+.vote-audit>div:first-child b{color:#7cf0ae}
+.vote-audit>div:last-child b{color:#ff9ba8}
+.vote-audit span{overflow-wrap:anywhere}
+@media(max-width:600px){.game-actions{flex-wrap:wrap}.vote-actions{width:100%}.vote-actions .vote{flex:1}}
