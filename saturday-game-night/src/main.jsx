@@ -80,6 +80,7 @@ function App() {
   useEffect(() => {
     if (!db || !session) return;
     refresh();
+    loadChatMessages();
     const channel = db.channel("game-night-board")
       .on("postgres_changes", { event: "*", schema: "public", table: "games" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, refresh)
