@@ -87,6 +87,7 @@ function App() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [attendance, setAttendance] = useState([]);
+  const [attendanceDrafts, setAttendanceDrafts] = useState({});
   const [myAttendance, setMyAttendance] = useState("");
   const [newEventTitle, setNewEventTitle] = useState("Saturday Game Night");
   const [newEventDate, setNewEventDate] = useState("");
@@ -127,6 +128,7 @@ function App() {
   const isGameAdmin = session?.user?.app_metadata?.role === "game_admin";
   const showAdminControls = isAdmin && adminMode;
   const canManageScoreboard = showAdminControls || scoreboardMode;
+  const canManageAttendance = showAdminControls || scoreboardMode;
 
   useEffect(() => {
     if (!db) { setLoading(false); return; }
@@ -266,6 +268,45 @@ function App() {
     if(!participantId||!selectedEventId||settings?.is_archived) return;
     const {error:e}=await db.from("game_attendance").upsert({event_id:selectedEventId,participant_id:participantId,status},{onConflict:"event_id,participant_id"});
     if(e) setError(e.message); else {setMyAttendance(status);await refresh();}
+  }
+
+  async function saveParticipantAttendance(person) {
+    if (!canManageAttendance || !selectedEventId || settings?.is_archived) return;
+    const current = attendance.find(row => row.participant_id === person.id);
+    const arrival = eventArrivals.find(row => row.participant_id === person.id);
+    const draft = attendanceDrafts[person.id] || {};
+    const status = draft.status ?? current?.status ?? "";
+    const time = draft.arrivalTime ?? toInputTime(arrival?.arrival_time);
+    if (!status) {
+      setError("Choose an attendance status before saving.");
+      return;
+    }
+    if ((status === "going" || status === "maybe") && !time) {
+      setError("Select an arrival time for participants marked Going or Maybe.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const { error: attendanceError } = await db.from("game_attendance").upsert(
+        { event_id: selectedEventId, participant_id: person.id, status },
+        { onConflict: "event_id,participant_id" }
+      );
+      if (attendanceError) throw attendanceError;
+      if (status === "going" || status === "maybe") {
+        const { error: arrivalError } = await db.from("game_event_arrivals").upsert(
+          { event_id: selectedEventId, participant_id: person.id, arrival_time: formatTime(time) },
+          { onConflict: "event_id,participant_id" }
+        );
+        if (arrivalError) throw arrivalError;
+      }
+      setNotice("Attendance updated for " + person.name + ".");
+      setAttendanceDrafts(v => { const next = { ...v }; delete next[person.id]; return next; });
+      await refresh();
+    } catch (err) {
+      setError(err.message || "Unable to update participant attendance.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   function selectGameNight(eventId) {
@@ -804,7 +845,7 @@ function App() {
         <section className="panel account-password-panel"><div className="panel-title"><div><small>SECURITY</small><h2>Change password</h2></div><span className="tile"><Shield size={18}/></span></div><p className="muted">Enter your current password, then choose a new password. Other devices will need to sign in again using the new password.</p><form className="change-password-form" onSubmit={changeMyPassword}><label>Current password<input type="password" value={currentPasswordDraft} onChange={e=>setCurrentPasswordDraft(e.target.value)} autoComplete="current-password" required/></label><label>New password<input type="password" value={newPasswordDraft} onChange={e=>setNewPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/><small>At least 8 characters.</small></label><label>Confirm new password<input type="password" value={confirmPasswordDraft} onChange={e=>setConfirmPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/></label><button className="primary" type="submit" disabled={busy || !currentPasswordDraft || newPasswordDraft.length<8 || !confirmPasswordDraft}>{busy ? "Updating…" : "Update password"}</button></form></section>
         {isAdmin && <p className="muted account-admin-hint">Administrator settings are available when you return to the game night board with admin mode enabled.</p>}
       </> : <>
-      <div className="welcome"><div><small>YOU'RE IN</small><h2>Hey, {name} ✌️</h2></div><span className="live"><i/> LIVE BOARD</span></div><section className="panel attendance-panel"><div className="panel-title"><div><small>THIS GAME NIGHT</small><h2>Attendance</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Let everyone know whether you are joining this date.</p><div className="attendance-actions">{[["going","Going"],["maybe","Maybe"],["not_going","Not Going"]].map(([value,label]) => <button key={value} className={"secondary"+(myAttendance===value?" selected":"")} disabled={busy||settings?.is_archived} onClick={() => setEventAttendance(value)}>{myAttendance===value?"✓ ":""}{label}</button>)}</div><div className="attendance-summary"><span><b>{goingCount}</b> Going</span><span><b>{maybeCount}</b> Maybe</span><span><b>{notGoingCount}</b> Not Going</span></div><div className="attendance-list">{attendance.map(item => <span key={item.id}>{participants.find(p=>p.id===item.participant_id)?.name||"Participant"} · {item.status==="not_going"?"Not Going":item.status[0].toUpperCase()+item.status.slice(1)}</span>)}</div>{(myAttendance==="going"||myAttendance==="maybe") && <form className="arrival-update" onSubmit={join}><label>Update your arrival time<ArrivalTimePicker value={arrivalTime} onChange={setArrivalTime}/><small>{arrivalTime ? "Current saved time: " + formatTime(arrivalTime) : "Please select a time."}</small></label><button className="secondary" disabled={busy||settings?.is_archived}>Save arrival time</button></form>}</section>
+      <div className="welcome"><div><small>YOU'RE IN</small><h2>Hey, {name} ✌️</h2></div><span className="live"><i/> LIVE BOARD</span></div><section className="panel attendance-panel"><div className="panel-title"><div><small>THIS GAME NIGHT</small><h2>Attendance</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Let everyone know whether you are joining this date.</p><div className="attendance-actions">{[["going","Going"],["maybe","Maybe"],["not_going","Not Going"]].map(([value,label]) => <button key={value} className={"secondary"+(myAttendance===value?" selected":"")} disabled={busy||settings?.is_archived} onClick={() => setEventAttendance(value)}>{myAttendance===value?"✓ ":""}{label}</button>)}</div><div className="attendance-summary"><span><b>{goingCount}</b> Going</span><span><b>{maybeCount}</b> Maybe</span><span><b>{notGoingCount}</b> Not Going</span></div><div className="attendance-list">{attendance.map(item => <span key={item.id}>{participants.find(p=>p.id===item.participant_id)?.name||"Participant"} · {item.status==="not_going"?"Not Going":item.status[0].toUpperCase()+item.status.slice(1)}</span>)}</div>{(myAttendance==="going"||myAttendance==="maybe") && <form className="arrival-update" onSubmit={join}><label>Update your arrival time<ArrivalTimePicker value={arrivalTime} onChange={setArrivalTime}/><small>{arrivalTime ? "Current saved time: " + formatTime(arrivalTime) : "Please select a time."}</small></label><button className="secondary" disabled={busy||settings?.is_archived}>Save arrival time</button></form>}{canManageAttendance && <div className="admin-section attendance-admin-section"><h3><Shield size={16}/> Manage participant attendance</h3><p className="muted">Administrators and Game Admins can update each participant’s RSVP and arrival time for this Game Night.</p>{participants.filter(person=>person.is_active!==false).map(person=>{const savedStatus=attendance.find(row=>row.participant_id===person.id)?.status||"";const savedArrival=eventArrivals.find(row=>row.participant_id===person.id)?.arrival_time;const draft=attendanceDrafts[person.id]||{};const status=draft.status??savedStatus;const time=draft.arrivalTime??toInputTime(savedArrival);return <div className="request-row attendance-admin-row" key={person.id}><div className="attendance-admin-person"><b>{person.name}</b><select aria-label={"Attendance status for "+person.name} value={status} onChange={e=>setAttendanceDrafts(v=>({...v,[person.id]:{...v[person.id],status:e.target.value}}))}><option value="">No response</option><option value="going">Going</option><option value="maybe">Maybe</option><option value="not_going">Not Going</option></select>{(status==="going"||status==="maybe")&&<ArrivalTimePicker value={time} onChange={value=>setAttendanceDrafts(v=>({...v,[person.id]:{...v[person.id],arrivalTime:value}}))}/>}</div><button className="secondary" disabled={busy||settings?.is_archived||!status||((status==="going"||status==="maybe")&&!time)} onClick={()=>saveParticipantAttendance(person)}>Save</button></div>;})}</div>}</section>
       <section className="stats">
         <div className="stat"><Gamepad2/><strong>{games.length}</strong><span>Games suggested</span></div>
         <div className="stat"><ThumbsUp/><strong>{votes.length}</strong><span>Total votes</span></div>
