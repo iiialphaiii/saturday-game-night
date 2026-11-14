@@ -34,6 +34,9 @@ function App() {
   const [expandedRounds, setExpandedRounds] = useState({});
   const [roundNotes, setRoundNotes] = useState({});
   const [placementDrafts, setPlacementDrafts] = useState({});
+  const [groupPassword, setGroupPassword] = useState("");
+  const [adminGroupPassword, setAdminGroupPassword] = useState("");
+  const [participantRoles, setParticipantRoles] = useState([]);
 
   const isAdmin = session?.user?.app_metadata?.role === "admin";
 
@@ -75,7 +78,7 @@ function App() {
 
   async function refresh() {
     if (!db || !session) return;
-    const [s, p, g, v, r, rp, requests, current] = await Promise.all([
+    const [s, p, g, v, r, rp, requests, current, roleResult] = await Promise.all([
       db.from("event_settings").select("*").eq("id", 1).maybeSingle(),
       db.from("participants").select("*").order("created_at"),
       db.from("games").select("*").order("created_at", { ascending: false }),
@@ -83,12 +86,14 @@ function App() {
       db.from("game_rounds").select("*").order("round_number"),
       db.from("game_round_placements").select("*").order("place"),
       db.from("participant_link_requests").select("*").order("requested_at", { ascending: false }),
-      db.rpc("get_my_participant_id")
+      db.rpc("get_my_participant_id"),
+      isAdmin ? db.rpc("admin_list_participant_roles") : Promise.resolve({ data: null, error: null })
     ]);
     const issue = [s, p, g, v, r, rp, requests, current].find(x => x.error);
     if (issue) setError(issue.error.message);
     if (s.data) setSettings(s.data);
     if (p.data) setParticipants(p.data);
+    if (roleResult?.data) setParticipantRoles(roleResult.data);
     if (g.data) setGames(g.data);
     if (v.data) setVotes(v.data);
     if (r.data) setRounds(r.data);
@@ -164,6 +169,10 @@ function App() {
         return;
       }
 
+      const { data: passwordAccepted, error: passwordError } = await db.rpc("verify_group_password", { p_password: groupPassword });
+      if (passwordError) throw passwordError;
+      if (!passwordAccepted) throw new Error("That group password is incorrect. Please try again.");
+
       const { data: allParticipants, error: peopleError } = await db.from("participants").select("id,name,is_active");
       if (peopleError) throw peopleError;
       const match = (allParticipants || []).find(p => normalizeName(p.name) === normalizeName(clean));
@@ -184,6 +193,7 @@ function App() {
         throw insertError;
       }
       setParticipantId(current.user.id);
+      setGroupPassword("");
       setName(clean);
       setNotice("You're on the list. Thanks for confirming your arrival time!");
       await refresh();
@@ -236,6 +246,18 @@ function App() {
     });
     if (e) setError(e.message);
     else { setNotice(approve ? "Participant request approved." : "Participant request declined."); await refresh(); }
+  }
+
+  async function saveGroupPassword() {
+    const { error: e } = await db.rpc("admin_set_group_password", { p_password: adminGroupPassword });
+    if (e) setError(e.message);
+    else { setAdminGroupPassword(""); setNotice("Group password updated. New participants must use the new password."); }
+  }
+
+  async function setParticipantAdmin(person, makeAdmin) {
+    const { error: e } = await db.rpc("admin_set_participant_admin", { p_participant_id: person.id, p_make_admin: makeAdmin });
+    if (e) setError(e.message);
+    else { setNotice(person.name + (makeAdmin ? " is now an administrator." : " is no longer an administrator.")); await db.auth.refreshSession(); await refresh(); }
   }
 
   async function setParticipantActive(person, active) {
@@ -327,8 +349,9 @@ function App() {
       <div className="join-icon"><Users size={21}/></div><div><h2>{pendingLink ? "Request pending" : "Who's joining?"}</h2><p>{pendingLink ? "An admin needs to approve your request to use an existing participant profile. You can keep this page open; it will update after approval." : "Enter your name and confirm when you expect to arrive. Your name is locked after registration."}</p></div>
       {!pendingLink && <form className="join-form" onSubmit={join}>
         <label>Your name<input value={nameInput} onChange={e=>setNameInput(e.target.value)} placeholder="Enter your name" maxLength={40} required/></label>
+        <label>Group password<input type="password" value={groupPassword} onChange={e=>setGroupPassword(e.target.value)} placeholder="Enter the group password" autoComplete="off" required/><small>Ask an organizer for the current group password.</small></label>
         <label>What time can you arrive?<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)} required/><small>Please select your expected arrival time.</small></label>
-        <button className="primary" disabled={busy || !nameInput.trim() || !arrivalTime}>{busy ? "Joining…" : "Join game night"} <span>→</span></button>
+        <button className="primary" disabled={busy || !nameInput.trim() || !arrivalTime || !groupPassword}>{busy ? "Joining…" : "Join game night"} <span>→</span></button>
       </form>}
       {duplicateParticipant && <div className="duplicate-prompt"><div><b>This name already exists</b><p>{duplicateParticipant.is_active === false ? <>A participant named <strong>{duplicateParticipant.name}</strong> already exists but is currently inactive. Ask an admin to restore that participant. You cannot create a duplicate.</> : <>A participant named <strong>{duplicateParticipant.name}</strong> is already registered. Would you like to request to use this existing participant instead? An admin must approve the link to protect the existing account.</>}</p></div><div className="duplicate-actions">{duplicateParticipant.is_active !== false && <button className="primary" disabled={busy} onClick={() => createLinkRequest(duplicateParticipant)}>Request existing participant</button>}<button className="secondary" onClick={() => { setDuplicateParticipant(null); setNameInput(""); }}>Choose another name</button></div></div>}
       {pendingLink && <button className="secondary pending-cancel" onClick={switchName}>Cancel and switch session</button>}
@@ -376,9 +399,13 @@ function App() {
       </section>
 
       {isAdmin && <section className="panel admin-panel"><div className="panel-title"><div><small>ADMINISTRATION</small><h2>Admin controls</h2></div><span className="tile"><Shield/></span></div>
+        <div className="admin-section"><h3><Shield size={16}/> Group password</h3><p className="muted">Set or replace the password required for new participant accounts. Existing participants stay signed in.</p><div className="admin-password-form"><input type="password" value={adminGroupPassword} onChange={e=>setAdminGroupPassword(e.target.value)} placeholder="New group password (6+ characters)" minLength={6} maxLength={200} autoComplete="new-password"/><button className="primary" disabled={adminGroupPassword.trim().length < 6} onClick={saveGroupPassword}>Save group password</button></div></div>
         <div className="admin-setting"><div><b>Voting status</b><p>{settings?.voting_open ? "Participants can currently vote." : "Voting is closed for everyone."}</p></div><button className="primary" onClick={toggleVoting}>{settings?.voting_open ? "Close voting" : "Open voting"}</button></div>
         <div className="admin-section"><h3><UserCheck size={16}/> Participant link requests <span>{pendingRequests.length}</span></h3>
           {!pendingRequests.length ? <p className="muted">No pending requests.</p> : pendingRequests.map(request=><div className="request-row" key={request.id}><div><b>{participants.find(p=>p.id===request.target_participant_id)?.name || "Existing participant"}</b><small>Requested by a new anonymous session · {new Date(request.requested_at).toLocaleString()}</small></div><div className="request-actions"><button className="secondary" onClick={()=>decideLink(request.id,false)}>Decline</button><button className="primary" onClick={()=>decideLink(request.id,true)}>Approve</button></div></div>)}
+        </div>
+        <div className="admin-section"><h3><Shield size={16}/> Administrator access</h3><p className="muted">Promote trusted participants to admins. Admins can manage the board and other admin accounts. The last admin cannot be removed.</p>
+          {participants.map(person => { const role = participantRoles.find(r => r.participant_id === person.id); const admin = !!role?.is_admin; return <div className="request-row" key={person.id}><div><b>{person.name}</b><small>{admin ? "Administrator" : "Participant"}</small></div><div className="request-actions"><button className={admin ? "secondary" : "primary"} onClick={()=>setParticipantAdmin(person,!admin)}>{admin ? "Remove admin" : "Promote to admin"}</button></div></div>; })}
         </div>
         <div className="admin-section"><h3><Users size={16}/> Manage participants</h3>
           {participants.map(person=><div className="request-row" key={person.id}><div><b>{person.name} {!person.is_active && <small className="inactive-label">INACTIVE</small>}</b><small>{person.arrival_time || "Arrival not set"}</small></div><div className="request-actions"><button className="icon-action" title="Edit name" onClick={()=>renameParticipant(person)}><Pencil size={14}/></button>{person.is_active === false ? <button className="secondary" onClick={()=>setParticipantActive(person,true)}><UserCheck size={14}/> Restore</button> : <button className="secondary" onClick={()=>setParticipantActive(person,false)}><UserX size={14}/> Remove</button>}</div></div>)}
