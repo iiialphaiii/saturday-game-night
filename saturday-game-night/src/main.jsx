@@ -135,7 +135,7 @@ function App() {
   }
   function toInputEventTime(value) {
     if (!value) return "19:00";
-    const match = value.match(/^(\\d{1,2}):(\\d{2})\\s*(AM|PM)?$/i);
+    const match = value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
     if (!match) return "19:00";
     let hour = Number(match[1]);
     const minute = match[2];
