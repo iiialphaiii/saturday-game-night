@@ -81,6 +81,7 @@ function App() {
   const [chatExpanded, setChatExpanded] = useState(false);
   const [games, setGames] = useState([]);
   const [votes, setVotes] = useState([]);
+  const [voteCounts, setVoteCounts] = useState([]);
   const [settings, setSettings] = useState(null);
   const [gameNights, setGameNights] = useState([]);
   const [selectedEventId, setSelectedEventId] = useState(null);
@@ -129,6 +130,7 @@ function App() {
   const showAdminControls = isAdmin && adminMode;
   const canManageScoreboard = showAdminControls || scoreboardMode;
   const canManageAttendance = showAdminControls || scoreboardMode;
+  const canViewVoteDetails = showAdminControls || (isGameAdmin && scoreboardMode);
 
   useEffect(() => {
     if (!db) { setLoading(false); return; }
@@ -236,7 +238,7 @@ function App() {
       else setName("");
     }
     if (!activeId) {
-      setSettings(null);setGames([]);setVotes([]);setRounds([]);setPlacements([]);setAttendance([]);setChatMessages([]);setLoading(false);return;
+      setSettings(null);setGames([]);setVotes([]);setVoteCounts([]);setRounds([]);setPlacements([]);setAttendance([]);setChatMessages([]);setLoading(false);return;
     }
     const [eventResult,gamesResult,attendanceResult,arrivalResult] = await Promise.all([
       db.from("game_nights").select("*").eq("id",activeId).maybeSingle(),
@@ -247,13 +249,14 @@ function App() {
     const issue2=[eventResult,gamesResult,attendanceResult,arrivalResult].find(x=>x.error);
     if(issue2) setError(issue2.error.message);
     const eventGames=gamesResult.data||[], gameIds=eventGames.map(g=>g.id);
-    const [votesResult,roundsResult] = gameIds.length ? await Promise.all([
+    const [votesResult,voteCountsResult,roundsResult] = gameIds.length ? await Promise.all([
       db.from("votes").select("*").in("game_id",gameIds),
+      db.rpc("get_game_vote_counts",{p_game_ids:gameIds}),
       db.from("game_rounds").select("*").in("game_id",gameIds).order("round_number")
-    ]) : [{data:[],error:null},{data:[],error:null}];
+    ]) : [{data:[],error:null},{data:[],error:null},{data:[],error:null}];
     const roundIds=(roundsResult.data||[]).map(r=>r.id);
     const placementsResult=roundIds.length ? await db.from("game_round_placements").select("*").in("round_id",roundIds).order("place") : {data:[],error:null};
-    const issue3=[votesResult,roundsResult,placementsResult].find(x=>x.error);
+    const issue3=[votesResult,voteCountsResult,roundsResult,placementsResult].find(x=>x.error);
     if(issue3) setError(issue3.error.message);
     if(eventResult.data){
       setSettings(eventResult.data);
@@ -263,7 +266,7 @@ function App() {
       setEventLocationDraft(eventResult.data.location||"");
       setCalendarMonth(new Date(Number(eventResult.data.event_date.slice(0,4)),Number(eventResult.data.event_date.slice(5,7))-1,1));
     }
-    setGames(eventGames);setVotes(votesResult.data||[]);setRounds(roundsResult.data||[]);setPlacements(placementsResult.data||[]);
+    setGames(eventGames);setVotes(votesResult.data||[]);setVoteCounts(voteCountsResult.data||[]);setRounds(roundsResult.data||[]);setPlacements(placementsResult.data||[]);
     setAttendance(attendanceResult.data||[]);
     setEventArrivals(arrivalResult.data||[]);
     const myArrival=(arrivalResult.data||[]).find(x=>x.participant_id===current.data);
@@ -906,9 +909,9 @@ function App() {
 
   const ranked = useMemo(() => games.map(g => ({
     ...g,
-    count: votes.filter(v => v.game_id === g.id).length,
-    mine: votes.some(v => v.game_id === g.id && v.participant_id === participantId)
-  })).sort((a, b) => b.count - a.count || a.title.localeCompare(b.title)), [games, votes, participantId]);
+    count: Number(voteCounts.find(v => v.game_id === g.id)?.vote_count ?? 0),
+    mine: voteCounts.some(v => v.game_id === g.id && v.has_voted)
+  })).sort((a, b) => b.count - a.count || a.title.localeCompare(b.title)), [games, votes, voteCounts, participantId]);
   const max = Math.max(1, ...ranked.map(g => g.count));
   const pendingRequests = linkRequests.filter(r => r.status === "pending");
   const goingCount = attendance.filter(x => x.status === "going").length;
@@ -957,7 +960,7 @@ function App() {
         </section>
         <section className="panel voting"><div className="panel-title"><div><small>THE COMMUNITY PICKS</small><h2>Vote for games</h2></div><span className="tile gold"><Trophy/></span></div><p className="instruction"><i/> Vote for every game you'd like to play.</p>
           {!settings?.voting_open && <div className="closed">Voting is currently closed.</div>}
-          {!ranked.length ? <div className="empty"><Gamepad2 size={28}/><b>No games yet</b><span>Be the first to suggest one!</span></div> : <div className="game-list">{ranked.map((g,i)=><article className="game" key={g.id}><div className="rank">{i===0 && g.count ? <Trophy size={16}/> : String(i+1).padStart(2,"0")}</div><div className="game-info"><div className="game-heading"><b>{g.title}</b>{i===0 && g.count>0 && <small>LEADING</small>}</div>{g.description && <p>{g.description}</p>}<div className="byline">Suggested by {participants.find(p=>p.id===g.suggested_by)?.name || "a participant"}</div><div className="bar"><span style={{width:(g.count/max*100)+"%"}}/></div></div><div className="game-actions">{showAdminControls && !settings?.is_archived && <button className="icon-action" title="Edit game" onClick={()=>updateGame(g)}><Pencil size={14}/></button>}{showAdminControls && !settings?.is_archived && <button className="icon-action danger" title="Delete game" onClick={()=>deleteGame(g)}><Trash2 size={14}/></button>}<button className={"vote "+(g.mine?"selected":"")} onClick={()=>vote(g.id)} disabled={busy || !settings?.voting_open || settings?.is_archived}>{g.mine?<Check size={16}/>:<ThumbsUp size={16}/>}<b>{g.count}</b></button></div></article>)}</div>}
+          {!ranked.length ? <div className="empty"><Gamepad2 size={28}/><b>No games yet</b><span>Be the first to suggest one!</span></div> : <div className="game-list">{ranked.map((g,i)=><article className="game" key={g.id}><div className="rank">{i===0 && g.count ? <Trophy size={16}/> : String(i+1).padStart(2,"0")}</div><div className="game-info"><div className="game-heading"><b>{g.title}</b>{i===0 && g.count>0 && <small>LEADING</small>}</div>{g.description && <p>{g.description}</p>}<div className="byline">Suggested by {participants.find(p=>p.id===g.suggested_by)?.name || "a participant"}</div><div className="bar"><span style={{width:(g.count/max*100)+"%"}}/></div>{canViewVoteDetails && <div className="vote-audit"><b>Voted by</b><span>{g.count ? votes.filter(v=>v.game_id===g.id).map(v=>participants.find(p=>p.id===v.participant_id)?.name || "Unknown participant").sort((a,b)=>a.localeCompare(b)).join(", ") : "No votes yet"}</span></div>}</div><div className="game-actions">{showAdminControls && !settings?.is_archived && <button className="icon-action" title="Edit game" onClick={()=>updateGame(g)}><Pencil size={14}/></button>}{showAdminControls && !settings?.is_archived && <button className="icon-action danger" title="Delete game" onClick={()=>deleteGame(g)}><Trash2 size={14}/></button>}<button className={"vote "+(g.mine?"selected":"")} onClick={()=>vote(g.id)} disabled={busy || !settings?.voting_open || settings?.is_archived}>{g.mine?<Check size={16}/>:<ThumbsUp size={16}/>}<b>{g.count}</b></button></div></article>)}</div>}
           <div className="footnote">You can change your vote anytime while voting is open.</div>
         </section>
       </div>
