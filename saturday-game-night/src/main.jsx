@@ -15,6 +15,7 @@ function App() {
   const [name, setName] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [participantNameDraft, setParticipantNameDraft] = useState("");
+  const [participantSloganDraft, setParticipantSloganDraft] = useState("");
   const [arrivalTime, setArrivalTime] = useState("19:00");
   const [participantId, setParticipantId] = useState(null);
   const [participants, setParticipants] = useState([]);
@@ -127,6 +128,7 @@ function App() {
         setName(me.name);
         setNameInput(me.name);
         setParticipantNameDraft(me.name);
+        setParticipantSloganDraft(me.slogan || "");
         setArrivalTime(toInputTime(me.arrival_time));
       } else {
         setName("");
@@ -316,6 +318,24 @@ function App() {
       await refresh();
     } catch (err) {
       setError(err.message || "Unable to update your name.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateMyParticipantSlogan(e) {
+    e.preventDefault();
+    const clean = participantSloganDraft.trim();
+    if (clean.length > 100) { setError("Slogan must be 100 characters or fewer."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const { error: updateError } = await db.rpc("update_my_participant_slogan", { p_slogan: clean });
+      if (updateError) throw updateError;
+      setParticipantSloganDraft(clean);
+      setNotice(clean ? "Your slogan has been updated." : "Your slogan has been cleared.");
+      await refresh();
+    } catch (err) {
+      setError(err.message || "Unable to update your slogan.");
     } finally {
       setBusy(false);
     }
@@ -556,7 +576,7 @@ function App() {
     </section> : <>
       {accountMode ? <>
         <div className="account-page-heading"><small>ACCOUNT</small><h1>Account settings</h1><p>Manage your participant profile and sign-in details.</p></div>
-        <section className="panel account-profile-panel"><div className="panel-title"><div><small>PARTICIPANT PROFILE</small><h2>{name}</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Update your display name here. Names must be unique; changing your name will update it everywhere on the game night board.</p><form className="change-password-form account-name-form" onSubmit={updateMyParticipantName}><label>Participant name<input type="text" value={participantNameDraft} onChange={e=>setParticipantNameDraft(e.target.value)} maxLength={80} autoComplete="name" required/></label><button className="secondary" disabled={busy || !participantNameDraft.trim()}>Save name</button></form><form className="arrival-update account-arrival-form" onSubmit={join}><label>Arrival time<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)}/></label><button className="secondary" disabled={busy}>Save arrival time</button></form></section>
+        <section className="panel account-profile-panel"><div className="panel-title"><div><small>PARTICIPANT PROFILE</small><h2>{name}</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Update your display name here. Names must be unique; changing your name will update it everywhere on the game night board.</p><form className="change-password-form account-name-form" onSubmit={updateMyParticipantName}><label>Participant name<input type="text" value={participantNameDraft} onChange={e=>setParticipantNameDraft(e.target.value)} maxLength={80} autoComplete="name" required/></label><button className="secondary" disabled={busy || !participantNameDraft.trim()}>Save name</button></form><form className="change-password-form account-slogan-form" onSubmit={updateMyParticipantSlogan}><label>Slogan <small>Shown next to your name in The Crew only.</small><input type="text" value={participantSloganDraft} onChange={e=>setParticipantSloganDraft(e.target.value)} maxLength={100} placeholder="e.g. Board game champion"/></label><button className="secondary" disabled={busy}>Save slogan</button></form><form className="arrival-update account-arrival-form" onSubmit={join}><label>Arrival time<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)}/></label><button className="secondary" disabled={busy}>Save arrival time</button></form></section>
         <section className="panel account-password-panel"><div className="panel-title"><div><small>SECURITY</small><h2>Change password</h2></div><span className="tile"><Shield size={18}/></span></div><p className="muted">Enter your current password, then choose a new password. Other devices will need to sign in again using the new password.</p><form className="change-password-form" onSubmit={changeMyPassword}><label>Current password<input type="password" value={currentPasswordDraft} onChange={e=>setCurrentPasswordDraft(e.target.value)} autoComplete="current-password" required/></label><label>New password<input type="password" value={newPasswordDraft} onChange={e=>setNewPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/><small>At least 8 characters.</small></label><label>Confirm new password<input type="password" value={confirmPasswordDraft} onChange={e=>setConfirmPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/></label><button className="primary" type="submit" disabled={busy || !currentPasswordDraft || newPasswordDraft.length<8 || !confirmPasswordDraft}>{busy ? "Updating…" : "Update password"}</button></form></section>
         {isAdmin && <p className="muted account-admin-hint">Administrator settings are available when you return to the game night board with admin mode enabled.</p>}
       </> : <>
@@ -579,7 +599,7 @@ function App() {
       </div>
 
       <section className="panel crew"><div className="crew-head"><div><small>THE CREW</small><h2>Who's playing?</h2></div><span>{activeParticipants.length} {activeParticipants.length===1?"person":"people"}</span></div>
-        <div className="people">{activeParticipants.map((p,i)=><div className="person" key={p.id}><span className={"avatar a"+(i%5)}>{p.name.charAt(0).toUpperCase()}</span><span className="person-detail"><b>{p.name}{p.id===participantId && <em>YOU</em>}</b><small><Clock3 size={12}/> Arriving at {p.arrival_time || "Time not confirmed"}</small></span></div>)}</div>
+        <div className="people">{activeParticipants.map((p,i)=><div className="person" key={p.id}><span className={"avatar a"+(i%5)}>{p.name.charAt(0).toUpperCase()}</span><span className="person-detail"><b>{p.name}{p.id===participantId && <em>YOU</em>}{p.slogan && <span className="person-slogan"> · {p.slogan}</span>}</b><small><Clock3 size={12}/> Arriving at {p.arrival_time || "Time not confirmed"}</small></span></div>)}</div>
         <form className="arrival-update" onSubmit={join}><label>Update your arrival time<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)}/></label><button className="secondary" disabled={busy}>Save arrival time</button></form>
       </section>
       <section className="panel history"><div className="crew-head"><div><small>THE SCOREBOARD</small><h2>Game round history</h2></div><span>{rounds.length} rounds recorded</span></div>
