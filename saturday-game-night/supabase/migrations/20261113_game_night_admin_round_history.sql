@@ -144,4 +144,5 @@ begin
 end;
 $$;
 revoke all on function public.admin_decide_participant_link_request(bigint, boolean) from public;
+revoke execute on function public.admin_decide_participant_link_request(bigint, boolean) from anon;
 grant execute on function public.admin_decide_participant_link_request(bigint, boolean) to authenticated;
