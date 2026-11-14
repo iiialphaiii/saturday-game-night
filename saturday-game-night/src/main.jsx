@@ -48,7 +48,9 @@ function App() {
   const [accountMode, setAccountMode] = useState(false);
 
   const isAdmin = session?.user?.app_metadata?.role === "admin";
+  const isGameAdmin = session?.user?.app_metadata?.role === "game_admin";
   const showAdminControls = isAdmin && adminMode;
+  const canManageScoreboard = showAdminControls || isGameAdmin;
 
   useEffect(() => {
     if (!db) { setLoading(false); return; }
@@ -367,6 +369,17 @@ function App() {
     else { setNotice(person.name + (makeAdmin ? " is now an administrator." : " is no longer an administrator.")); await db.auth.refreshSession(); await refresh(); }
   }
 
+  async function setParticipantGameAdmin(person, makeGameAdmin) {
+    const { error: e } = await db.rpc("admin_set_participant_game_admin", {
+      p_participant_id: person.id, p_make_game_admin: makeGameAdmin
+    });
+    if (e) setError(e.message);
+    else {
+      setNotice(person.name + (makeGameAdmin ? " is now a Game Admin and can manage the scoreboard." : " is no longer a Game Admin."));
+      await refresh();
+    }
+  }
+
   async function resetParticipantPassword(person) {
     const next = window.prompt("Set a new password for " + person.name + " (at least 8 characters):");
     if (next === null) return;
@@ -549,13 +562,13 @@ function App() {
               {!gameRounds.length && <p className="muted">No rounds recorded yet.</p>}
               {gameRounds.map(round => {
                 const results = placements.filter(p=>p.round_id===round.id).sort((a,b)=>a.place-b.place);
-                return <div className="round-card" key={round.id}><div className="round-heading"><div className="round-title"><b>Round {round.round_number}</b>{round.notes && <span>{round.notes}</span>}</div>{showAdminControls && <div className="round-actions"><button className="icon-action" title="Edit round" onClick={()=>editRound(round)}><Pencil size={13}/></button><button className="icon-action danger" title="Delete round" onClick={()=>deleteRound(round)}><Trash2 size={13}/></button></div>}</div>
-                  {results.length ? <ol className="placement-list">{results.map(result=><li key={result.id}><span className="place-label">{result.place===1?"1st":result.place===2?"2nd":result.place===3?"3rd":result.place+"th"}</span><b>{participants.find(p=>p.id===result.participant_id)?.name || "Former participant"}</b>{result.score!==null && result.score!==undefined && <small>Score: {result.score}</small>}{result.notes && <small>{result.notes}</small>}{showAdminControls && <div className="result-actions"><button className="icon-action" onClick={()=>editPlacement(result)} title="Edit result"><Pencil size={12}/></button><button className="icon-action danger" onClick={()=>deletePlacement(result)} title="Remove result"><Trash2 size={13}/></button></div>}</li>)}</ol> : <p className="muted">No placements entered for this round yet.</p>}
-                  {showAdminControls && <div className="placement-form"><select value={placementDrafts[round.id]?.participant_id || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],participant_id:e.target.value,place:v[round.id]?.place||"1"}}))}><option value="">Select participant</option>{participants.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select><input type="number" min="1" step="1" placeholder="Place" value={placementDrafts[round.id]?.place || "1"} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],place:e.target.value}}))}/><input type="number" placeholder="Score (optional)" value={placementDrafts[round.id]?.score || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],score:e.target.value}}))}/><button className="secondary" onClick={()=>addPlacement(round)}>Add result</button></div>}
+                return <div className="round-card" key={round.id}><div className="round-heading"><div className="round-title"><b>Round {round.round_number}</b>{round.notes && <span>{round.notes}</span>}</div>{canManageScoreboard && <div className="round-actions"><button className="icon-action" title="Edit round" onClick={()=>editRound(round)}><Pencil size={13}/></button><button className="icon-action danger" title="Delete round" onClick={()=>deleteRound(round)}><Trash2 size={13}/></button></div>}</div>
+                  {results.length ? <ol className="placement-list">{results.map(result=><li key={result.id}><span className="place-label">{result.place===1?"1st":result.place===2?"2nd":result.place===3?"3rd":result.place+"th"}</span><b>{participants.find(p=>p.id===result.participant_id)?.name || "Former participant"}</b>{result.score!==null && result.score!==undefined && <small>Score: {result.score}</small>}{result.notes && <small>{result.notes}</small>}{canManageScoreboard && <div className="result-actions"><button className="icon-action" onClick={()=>editPlacement(result)} title="Edit result"><Pencil size={12}/></button><button className="icon-action danger" onClick={()=>deletePlacement(result)} title="Remove result"><Trash2 size={13}/></button></div>}</li>)}</ol> : <p className="muted">No placements entered for this round yet.</p>}
+                  {canManageScoreboard && <div className="placement-form"><select value={placementDrafts[round.id]?.participant_id || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],participant_id:e.target.value,place:v[round.id]?.place||"1"}}))}><option value="">Select participant</option>{participants.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select><input type="number" min="1" step="1" placeholder="Place" value={placementDrafts[round.id]?.place || "1"} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],place:e.target.value}}))}/><input type="number" placeholder="Score (optional)" value={placementDrafts[round.id]?.score || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],score:e.target.value}}))}/><button className="secondary" onClick={()=>addPlacement(round)}>Add result</button></div>}
                 </div>;
               })}
             </div>}
-            {showAdminControls && <div className="new-round"><input placeholder="Round notes (optional)" value={roundNotes[game.id]||""} onChange={e=>setRoundNotes(v=>({...v,[game.id]:e.target.value}))}/><button className="secondary" onClick={()=>createRound(game)}><Plus size={14}/> Add round</button></div>}
+            {canManageScoreboard && <div className="new-round"><input placeholder="Round notes (optional)" value={roundNotes[game.id]||""} onChange={e=>setRoundNotes(v=>({...v,[game.id]:e.target.value}))}/><button className="secondary" onClick={()=>createRound(game)}><Plus size={14}/> Add round</button></div>}
           </div>;
         })}
       </section>
@@ -566,6 +579,9 @@ function App() {
         <div className="admin-setting"><div><b>Voting status</b><p>{settings?.voting_open ? "Participants can currently vote." : "Voting is closed for everyone."}</p></div><button className="primary" onClick={toggleVoting}>{settings?.voting_open ? "Close voting" : "Open voting"}</button></div>
         <div className="admin-section"><h3><Shield size={16}/> Administrator access</h3><p className="muted">Promote trusted participants to admins. Admins can manage the board and other admin accounts. The last admin cannot be removed.</p>
           {participants.map(person => { const role = participantRoles.find(r => r.participant_id === person.id); const admin = !!role?.is_admin; return <div className="request-row" key={person.id}><div><b>{person.name}</b><small>{admin ? "Administrator" : "Participant"}</small></div><div className="request-actions"><button className={admin ? "secondary" : "primary"} onClick={()=>setParticipantAdmin(person,!admin)}>{admin ? "Remove admin" : "Promote to admin"}</button></div></div>; })}
+        </div>
+        <div className="admin-section"><h3><Trophy size={16}/> Game Admin access</h3><p className="muted">Game Admins can add, edit, and remove game rounds and scoreboard placements. They cannot access full admin controls or manage participant accounts.</p>
+          {participants.map(person => { const role = participantRoles.find(r => r.participant_id === person.id); const admin = !!role?.is_admin; const gameAdmin = !!role?.is_game_admin; return <div className="request-row" key={person.id}><div><b>{person.name}</b><small>{admin ? "Full administrator" : gameAdmin ? "Game Admin" : "Participant"}</small></div><div className="request-actions">{!admin && <button className={gameAdmin ? "secondary" : "primary"} onClick={()=>setParticipantGameAdmin(person,!gameAdmin)}>{gameAdmin ? "Remove Game Admin" : "Promote to Game Admin"}</button>}</div></div>; })}
         </div>
         <div className="admin-section"><h3><Users size={16}/> Manage participants</h3><p className="muted">Existing participants created before password sign-in do not have passwords yet. Set a password for each person here before they sign in on a new device.</p>
           {participants.map(person=><div className="request-row" key={person.id}><div><b>{person.name} {!person.is_active && <small className="inactive-label">INACTIVE</small>}</b><small>{person.arrival_time || "Arrival not set"}</small></div><div className="request-actions"><button className="secondary" onClick={()=>resetParticipantPassword(person)}>Reset password</button><button className="icon-action" title="Edit name" onClick={()=>renameParticipant(person)}><Pencil size={14}/></button>{person.is_active === false ? <button className="secondary" onClick={()=>setParticipantActive(person,true)}><UserCheck size={14}/> Restore</button> : <button className="secondary" onClick={()=>setParticipantActive(person,false)}><UserX size={14}/> Remove</button>}</div></div>)}
