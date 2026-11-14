@@ -132,6 +132,7 @@ function App() {
   }
 
   function toInputTime(value) {
+    if (value === "TBD Pending...") return "";
     if (!value) return "19:00";
     const match = value.match(/^(\d{1,2}):(\d{2})/);
     if (!match) return "19:00";
@@ -184,6 +185,7 @@ function App() {
       const { data: ownProfile, error: ownError } = await db.from("participants").select("*").eq("id", id).maybeSingle();
       if (ownError) throw ownError;
       if (ownProfile) {
+        if (!arrivalTime) throw new Error("Please select your arrival time.");
         const { error: updateError } = await db.from("participants").update({ arrival_time: formatTime(arrivalTime) }).eq("id", id);
         if (updateError) throw updateError;
         setName(ownProfile.name); setParticipantId(id); setParticipantPassword("");
