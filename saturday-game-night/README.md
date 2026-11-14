@@ -75,6 +75,6 @@ where p.id = u.id
       lower(regexp_replace(btrim('YOUR EXACT PARTICIPANT NAME'), '\\s+', ' ', 'g'));
 \`\`\`
 
-Sign out and back in (or refresh the anonymous session) after the role change so the new JWT contains the admin claim. Keep admin access limited to trusted organizers.
+Reload the app after the role change. The app refreshes the current session token at startup so the new JWT includes the admin claim; do not sign out of the anonymous admin session, because anonymous accounts are browser/device-specific. Admins can correct their own name from the Admin controls. Keep admin access limited to trusted organizers.
 
 The app continues to use anonymous sign-in. Because anonymous sessions are device/browser-specific, an existing participant link request requires an administrator to approve the association. An admin should approve only after verifying who is making the request in person or through a trusted channel.
