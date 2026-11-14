@@ -45,6 +45,7 @@ function App() {
   const [adminGroupPassword, setAdminGroupPassword] = useState("");
   const [participantRoles, setParticipantRoles] = useState([]);
   const [adminMode, setAdminMode] = useState(true);
+  const [accountMode, setAccountMode] = useState(false);
 
   const isAdmin = session?.user?.app_metadata?.role === "admin";
   const showAdminControls = isAdmin && adminMode;
@@ -496,7 +497,7 @@ function App() {
   if (loading) return <div className="setup"><div className="setup-card"><div className="brand-icon"><Gamepad2/></div><h1>Loading game night…</h1></div></div>;
 
   return <main className="shell">
-    <header className="topbar"><a className="brand" href="#"><span className="brand-icon"><Gamepad2 size={21}/></span> GAME NIGHT</a><div className="top-actions">{isAdmin && <button className={"admin-mode-toggle "+(adminMode?"active":"")} onClick={()=>setAdminMode(v=>!v)}><Shield size={14}/>{adminMode?"Switch to normal mode":"Switch to admin mode"}</button>}{name && <button className="quiet" onClick={switchName}><LogOut size={15}/> Switch name</button>}</div></header>
+    <header className="topbar"><a className="brand" href="#"><span className="brand-icon"><Gamepad2 size={21}/></span> GAME NIGHT</a><div className="top-actions">{name && <button className={"admin-mode-toggle account-mode-toggle "+(accountMode?"active":"")} onClick={()=>{setAccountMode(v=>!v);setError("");setNotice("");}}><Settings size={14}/>{accountMode?"Back to game night":"Account"}</button>}{isAdmin && <button className={"admin-mode-toggle "+(adminMode?"active":"")} onClick={()=>setAdminMode(v=>!v)}><Shield size={14}/>{adminMode?"Switch to normal mode":"Switch to admin mode"}</button>}{name && <button className="quiet" onClick={switchName}><LogOut size={15}/> Switch name</button>}</div></header>
     <section className="hero">
       <div className="hero-copy"><div className="eyebrow"><Sparkles size={14}/> LET'S PICK THE NEXT GAME</div><h1>Saturday<br/><em>Game Night.</em></h1><p>Bring your best ideas. Vote for the games you want to play.</p><div className="event-meta"><span><CalendarDays size={16}/> {displayEventDate(settings?.event_date)}</span><span><Clock3 size={16}/> {settings?.event_time || "7:00 PM"}</span>{settings?.location && <span><MapPin size={16}/> {settings.location}</span>}</div></div>
       <div className="hero-graphic"><div className="halo"/><Gamepad2 size={178} strokeWidth={1.1}/><b>✦</b></div>
@@ -513,6 +514,12 @@ function App() {
       </form>
       {duplicateParticipant && <div className="duplicate-prompt"><div><b>This participant already exists</b><p><strong>{duplicateParticipant.name}</strong> is already registered. Enter that participant's password to access the existing account. A new account will not be created.</p></div><div className="duplicate-actions"><button className="primary" disabled={busy || participantPassword.length < 8} onClick={signInToExistingParticipant}>Sign in to existing account</button><button className="secondary" onClick={() => { setDuplicateParticipant(null); setNameInput(""); setParticipantPassword(""); }}>Choose another name</button></div></div>}
     </section> : <>
+      {accountMode ? <>
+        <div className="account-page-heading"><small>ACCOUNT</small><h1>Account settings</h1><p>Manage your participant profile and sign-in details.</p></div>
+        <section className="panel account-profile-panel"><div className="panel-title"><div><small>PARTICIPANT PROFILE</small><h2>{name}</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Your participant name is fixed to prevent duplicate accounts. You can update your arrival time below.</p><form className="arrival-update account-arrival-form" onSubmit={join}><label>Arrival time<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)}/></label><button className="secondary" disabled={busy}>Save arrival time</button></form></section>
+        <section className="panel account-password-panel"><div className="panel-title"><div><small>SECURITY</small><h2>Change password</h2></div><span className="tile"><Shield size={18}/></span></div><p className="muted">Enter your current password, then choose a new password. Other devices will need to sign in again using the new password.</p><form className="change-password-form" onSubmit={changeMyPassword}><label>Current password<input type="password" value={currentPasswordDraft} onChange={e=>setCurrentPasswordDraft(e.target.value)} autoComplete="current-password" required/></label><label>New password<input type="password" value={newPasswordDraft} onChange={e=>setNewPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/><small>At least 8 characters.</small></label><label>Confirm new password<input type="password" value={confirmPasswordDraft} onChange={e=>setConfirmPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/></label><button className="primary" type="submit" disabled={busy || !currentPasswordDraft || newPasswordDraft.length<8 || !confirmPasswordDraft}>{busy ? "Updating…" : "Update password"}</button></form></section>
+        {isAdmin && <p className="muted account-admin-hint">Administrator settings are available when you return to the game night board with admin mode enabled.</p>}
+      </> : <>
       <div className="welcome"><div><small>YOU'RE IN</small><h2>Hey, {name} ✌️</h2></div><span className="live"><i/> LIVE BOARD</span></div>
       <section className="stats">
         <div className="stat"><Gamepad2/><strong>{games.length}</strong><span>Games suggested</span></div>
@@ -535,17 +542,6 @@ function App() {
         <div className="people">{activeParticipants.map((p,i)=><div className="person" key={p.id}><span className={"avatar a"+(i%5)}>{p.name.charAt(0).toUpperCase()}</span><span className="person-detail"><b>{p.name}{p.id===participantId && <em>YOU</em>}</b><small><Clock3 size={12}/> Arriving at {p.arrival_time || "Time not confirmed"}</small></span></div>)}</div>
         <form className="arrival-update" onSubmit={join}><label>Update your arrival time<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)}/></label><button className="secondary" disabled={busy}>Save arrival time</button><span className="locked-name">Your participant name cannot be changed.</span></form>
       </section>
-      <section className="panel account-password-panel">
-        <div className="panel-title"><div><small>ACCOUNT SETTINGS</small><h2>Change password</h2></div><span className="tile"><Shield size={18}/></span></div>
-        <p className="muted">Update the password used to access your participant account. Other devices will need to sign in again with your new password.</p>
-        <form className="change-password-form" onSubmit={changeMyPassword}>
-          <label>Current password<input type="password" value={currentPasswordDraft} onChange={e=>setCurrentPasswordDraft(e.target.value)} autoComplete="current-password" required/></label>
-          <label>New password<input type="password" value={newPasswordDraft} onChange={e=>setNewPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/><small>At least 8 characters.</small></label>
-          <label>Confirm new password<input type="password" value={confirmPasswordDraft} onChange={e=>setConfirmPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/></label>
-          <button className="primary" type="submit" disabled={busy || !currentPasswordDraft || newPasswordDraft.length<8 || !confirmPasswordDraft}>{busy ? "Updating…" : "Update password"}</button>
-        </form>
-      </section>
-
       <section className="panel history"><div className="crew-head"><div><small>THE SCOREBOARD</small><h2>Game round history</h2></div><span>{rounds.length} rounds recorded</span></div>
         {games.map(game => {
           const gameRounds = rounds.filter(r => r.game_id === game.id).sort((a,b)=>a.round_number-b.round_number);
@@ -576,6 +572,7 @@ function App() {
           {participants.map(person=><div className="request-row" key={person.id}><div><b>{person.name} {!person.is_active && <small className="inactive-label">INACTIVE</small>}</b><small>{person.arrival_time || "Arrival not set"}</small></div><div className="request-actions"><button className="secondary" onClick={()=>resetParticipantPassword(person)}>Reset password</button><button className="icon-action" title="Edit name" onClick={()=>renameParticipant(person)}><Pencil size={14}/></button>{person.is_active === false ? <button className="secondary" onClick={()=>setParticipantActive(person,true)}><UserCheck size={14}/> Restore</button> : <button className="secondary" onClick={()=>setParticipantActive(person,false)}><UserX size={14}/> Remove</button>}</div></div>)}
         </div>
       </section>}
+      </>}
     </>}
     {(error||notice)&&<div className={"toast "+(error?"bad":"")}>{error||notice}<button onClick={()=>{setError("");setNotice("");}}>×</button></div>}
     <footer><span>MADE FOR GOOD COMPANY.</span><button onClick={refresh}><RefreshCw size={13}/> Refresh board</button></footer>
