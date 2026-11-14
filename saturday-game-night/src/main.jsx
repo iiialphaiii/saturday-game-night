@@ -21,6 +21,7 @@ function App() {
   const [participants, setParticipants] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
   const [chatDraft, setChatDraft] = useState("");
+  const [chatExpanded, setChatExpanded] = useState(false);
   const [games, setGames] = useState([]);
   const [votes, setVotes] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -672,7 +673,7 @@ function App() {
       </section>}
       </>}
     </>}
-    {session && participantId && !accountMode && <section className="panel game-chat-panel"><div className="panel-title"><div><small>THE GROUP CHAT</small><h2>Game Night Chat</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Send a message to everyone in the group.</p><div className="chat-message-list" aria-live="polite">{chatMessages.length ? chatMessages.map(msg=><article className={"chat-message"+(msg.participant_id===participantId?" own":"")} key={msg.id}><div className="chat-message-meta"><b>{msg.sender_name}</b><time dateTime={msg.created_at}>{formatChatTimestamp(msg.created_at)}</time></div><p>{msg.message}</p></article>) : <p className="chat-empty">No messages yet. Start the conversation!</p>}</div><form className="chat-compose" onSubmit={sendChatMessage}><textarea value={chatDraft} onChange={e=>setChatDraft(e.target.value)} maxLength={1000} rows={2} placeholder="Write a message..." aria-label="Chat message" required/><button className="primary" disabled={busy || !chatDraft.trim()}>Send message</button></form></section>}
+    {session && participantId && name && !accountMode && <section className={"panel game-chat-panel"+(chatExpanded?" expanded":"")}><div className="panel-title"><div><small>THE GROUP CHAT</small><h2>Game Night Chat</h2></div><button type="button" className="chat-toggle secondary" onClick={()=>setChatExpanded(v=>!v)}>{chatExpanded?"Show latest 3":"View chat history"}</button></div><p className="muted">Send a message to everyone in the group.</p><div className="chat-message-list" aria-live="polite">{chatMessages.length ? (chatExpanded ? chatMessages : chatMessages.slice(-3)).map(msg=><article className={"chat-message"+(msg.participant_id===participantId?" own":"")} key={msg.id}><div className="chat-message-meta"><b>{msg.sender_name}</b><time dateTime={msg.created_at}>{formatChatTimestamp(msg.created_at)}</time></div><p>{msg.message}</p></article>) : <p className="chat-empty">No messages yet. Start the conversation!</p>}</div><form className="chat-compose" onSubmit={sendChatMessage}><textarea value={chatDraft} onChange={e=>setChatDraft(e.target.value)} maxLength={1000} rows={2} placeholder="Write a message..." aria-label="Chat message" required/><button className="primary" disabled={busy || !chatDraft.trim()}>Send message</button></form></section>}
     {(error||notice)&&<div className={"toast "+(error?"bad":"")}>{error||notice}<button onClick={()=>{setError("");setNotice("");}}>×</button></div>}
     <footer><span>MADE BY PETER TRAN.</span><button onClick={refresh}><RefreshCw size={13}/> Refresh board</button></footer>
   </main>;
