@@ -57,7 +57,7 @@ function App() {
   const isAdmin = session?.user?.app_metadata?.role === "admin";
   const isGameAdmin = session?.user?.app_metadata?.role === "game_admin";
   const showAdminControls = isAdmin && adminMode;
-  const canManageScoreboard = showAdminControls || (scoreboardMode && (isGameAdmin || isAdmin));
+  const canManageScoreboard = showAdminControls || scoreboardMode;
 
   useEffect(() => {
     if (!db) { setLoading(false); return; }
@@ -463,18 +463,15 @@ function App() {
     }
     setBusy(true); setError(""); setNotice("");
     try {
-      const { data, error: refreshError } = await db.auth.refreshSession();
-      if (refreshError) throw refreshError;
-      const current = data.session || session;
-      if (current) setSession(current);
-      const role = current?.user?.app_metadata?.role;
-      if (role !== "game_admin" && role !== "admin") {
-        throw new Error("You do not have Game Admin access. Ask a full administrator to promote your account, then sign in again.");
+      const { data: allowed, error: permissionError } = await db.rpc("current_user_can_manage_scoreboard");
+      if (permissionError) throw permissionError;
+      if (allowed !== true) {
+        throw new Error("Your account is not assigned the Game Admin role. Ask a full administrator to promote the correct participant account.");
       }
       setScoreboardMode(true);
       setNotice("Scoreboard editing is on. You can now add, edit, and remove rounds and results.");
     } catch (err) {
-      setError(err.message || "Unable to enable scoreboard editing.");
+      setError(err.message || "Unable to verify scoreboard permissions.");
     } finally {
       setBusy(false);
     }
