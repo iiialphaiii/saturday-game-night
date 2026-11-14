@@ -35,10 +35,13 @@ function App() {
   const [roundNotes, setRoundNotes] = useState({});
   const [placementDrafts, setPlacementDrafts] = useState({});
   const [groupPassword, setGroupPassword] = useState("");
+  const [participantPassword, setParticipantPassword] = useState("");
   const [adminGroupPassword, setAdminGroupPassword] = useState("");
   const [participantRoles, setParticipantRoles] = useState([]);
+  const [adminMode, setAdminMode] = useState(true);
 
   const isAdmin = session?.user?.app_metadata?.role === "admin";
+  const showAdminControls = isAdmin && adminMode;
 
   useEffect(() => {
     if (!db) { setLoading(false); return; }
@@ -128,23 +131,12 @@ function App() {
     return (h % 12 || 12) + ":" + String(m).padStart(2, "0") + (h >= 12 ? " PM" : " AM");
   }
 
-  async function createLinkRequest(target) {
-    const { error: requestError } = await db.from("participant_link_requests").insert({
-      requester_id: session.user.id,
-      target_participant_id: target.id,
-      status: "pending"
-    });
-    if (requestError && !requestError.message.toLowerCase().includes("duplicate")) throw requestError;
-    setDuplicateParticipant(null);
-    setPendingLink(true);
-    setNotice("Your request to use " + target.name + "'s existing participant profile was sent to an admin. No duplicate participant was created.");
-    await refresh();
-  }
 
   async function join(e) {
     e.preventDefault();
     const clean = nameInput.trim().replace(/\s+/g, " ");
     if (!clean || !arrivalTime || !db) return;
+    if (participantPassword.length < 8) { setError("Participant password must be at least 8 characters."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
       let current = session;
@@ -163,15 +155,11 @@ function App() {
       if (ownProfile) {
         const { error: updateError } = await db.from("participants").update({ arrival_time: formatTime(arrivalTime) }).eq("id", id);
         if (updateError) throw updateError;
-        setName(ownProfile.name); setParticipantId(id);
+        setName(ownProfile.name); setParticipantId(id); setParticipantPassword("");
         setNotice("Your arrival time has been updated.");
         await refresh();
         return;
       }
-
-      const { data: passwordAccepted, error: passwordError } = await db.rpc("verify_group_password", { p_password: groupPassword });
-      if (passwordError) throw passwordError;
-      if (!passwordAccepted) throw new Error("That group password is incorrect. Please try again.");
 
       const { data: allParticipants, error: peopleError } = await db.from("participants").select("id,name,is_active");
       if (peopleError) throw peopleError;
@@ -180,6 +168,11 @@ function App() {
         setDuplicateParticipant(match);
         return;
       }
+
+      if (!groupPassword) throw new Error("Enter the group password to create a new participant account.");
+      const { data: passwordAccepted, error: passwordError } = await db.rpc("verify_group_password", { p_password: groupPassword });
+      if (passwordError) throw passwordError;
+      if (!passwordAccepted) throw new Error("That group password is incorrect. Please try again.");
 
       const { error: insertError } = await db.from("participants").insert({
         id: current.user.id, name: clean, arrival_time: formatTime(arrivalTime)
@@ -192,13 +185,46 @@ function App() {
         }
         throw insertError;
       }
+      const { error: savePasswordError } = await db.rpc("set_my_participant_password", { p_password: participantPassword });
+      if (savePasswordError) throw savePasswordError;
       setParticipantId(current.user.id);
-      setGroupPassword("");
+      setGroupPassword(""); setParticipantPassword("");
       setName(clean);
-      setNotice("You're on the list. Thanks for confirming your arrival time!");
+      setNotice("Your participant account has been created.");
       await refresh();
     } catch (e) {
       setError(e.message || "Couldn't join. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function signInToExistingParticipant() {
+    if (!duplicateParticipant || participantPassword.length < 8) return;
+    if (duplicateParticipant.is_active === false) { setError("This participant is inactive. Ask an admin to restore it."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      let current = session;
+      if (!current) {
+        const { data, error: authError } = await db.auth.signInAnonymously();
+        if (authError) throw authError;
+        current = data.session;
+        setSession(current);
+      }
+      const { data: linkedId, error: verifyError } = await db.rpc("sign_in_as_participant", {
+        p_name: duplicateParticipant.name, p_password: participantPassword
+      });
+      if (verifyError) throw verifyError;
+      if (!linkedId) throw new Error("The participant password is incorrect. Please try again.");
+      const { error: arrivalError } = await db.from("participants").update({ arrival_time: formatTime(arrivalTime) }).eq("id", linkedId);
+      if (arrivalError) throw arrivalError;
+      setDuplicateParticipant(null); setParticipantPassword(""); setGroupPassword("");
+      setParticipantId(linkedId); setName(duplicateParticipant.name);
+      setNotice("Signed in as " + duplicateParticipant.name + ".");
+      await db.auth.refreshSession();
+      await refresh();
+    } catch (e) {
+      setError(e.message || "Couldn't sign in. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -230,7 +256,7 @@ function App() {
 
   async function switchName() {
     await db.auth.signOut();
-    setName(""); setNameInput(""); setParticipantId(null); setDuplicateParticipant(null); setPendingLink(false); setGroupPassword("");
+    setName(""); setNameInput(""); setParticipantId(null); setDuplicateParticipant(null); setPendingLink(false); setGroupPassword(""); setParticipantPassword("");
     setArrivalTime("19:00");
   }
 
@@ -258,6 +284,17 @@ function App() {
     const { error: e } = await db.rpc("admin_set_participant_admin", { p_participant_id: person.id, p_make_admin: makeAdmin });
     if (e) setError(e.message);
     else { setNotice(person.name + (makeAdmin ? " is now an administrator." : " is no longer an administrator.")); await db.auth.refreshSession(); await refresh(); }
+  }
+
+  async function resetParticipantPassword(person) {
+    const next = window.prompt("Set a new password for " + person.name + " (at least 8 characters):");
+    if (next === null) return;
+    if (next.length < 8 || next.length > 200) { setError("Participant password must be at least 8 characters and no more than 200 characters."); return; }
+    const { error: e } = await db.rpc("admin_reset_participant_password", {
+      p_participant_id: person.id, p_password: next
+    });
+    if (e) setError(e.message);
+    else setNotice("Password reset for " + person.name + ". Share the new password with them privately.");
   }
 
   async function setParticipantActive(person, active) {
@@ -379,22 +416,22 @@ function App() {
   if (loading) return <div className="setup"><div className="setup-card"><div className="brand-icon"><Gamepad2/></div><h1>Loading game night…</h1></div></div>;
 
   return <main className="shell">
-    <header className="topbar"><a className="brand" href="#"><span className="brand-icon"><Gamepad2 size={21}/></span> GAME NIGHT</a><div className="top-actions">{isAdmin && <span className="admin-chip"><Shield size={13}/> ADMIN</span>}{name && !isAdmin && <button className="quiet" onClick={switchName}><LogOut size={15}/> Switch name</button>}</div></header>
+    <header className="topbar"><a className="brand" href="#"><span className="brand-icon"><Gamepad2 size={21}/></span> GAME NIGHT</a><div className="top-actions">{isAdmin && <button className={"admin-mode-toggle "+(adminMode?"active":"")} onClick={()=>setAdminMode(v=>!v)}><Shield size={14}/>{adminMode?"Switch to normal mode":"Switch to admin mode"}</button>}{name && <button className="quiet" onClick={switchName}><LogOut size={15}/> Switch name</button>}</div></header>
     <section className="hero">
       <div className="hero-copy"><div className="eyebrow"><Sparkles size={14}/> LET'S PICK THE NEXT GAME</div><h1>Saturday<br/><em>Game Night.</em></h1><p>Bring your best ideas. Vote for the games you want to play.</p><div className="event-meta"><span><CalendarDays size={16}/> {settings?.event_date || "Saturday, November 14, 2026"}</span><span><Clock3 size={16}/> {settings?.event_time || "7:00 PM"}</span></div></div>
       <div className="hero-graphic"><div className="halo"/><Gamepad2 size={178} strokeWidth={1.1}/><b>✦</b></div>
     </section>
 
     {!name ? <section className="join panel">
-      <div className="join-icon"><Users size={21}/></div><div><h2>{pendingLink ? "Request pending" : "Who's joining?"}</h2><p>{pendingLink ? "An admin needs to approve your request to use an existing participant profile. You can keep this page open; it will update after approval." : "Enter your name and confirm when you expect to arrive. Your name is locked after registration."}</p></div>
-      {!pendingLink && <form className="join-form" onSubmit={join}>
+      <div className="join-icon"><Users size={21}/></div><div><h2>Who's joining?</h2><p>Enter your name and confirm when you expect to arrive. Your name is locked after registration.</p></div>
+      <form className="join-form" onSubmit={e=>{e.preventDefault(); duplicateParticipant ? signInToExistingParticipant() : join(e);}}>
         <label>Your name<input value={nameInput} onChange={e=>setNameInput(e.target.value)} placeholder="Enter your name" maxLength={40} required/></label>
-        <label>Group password<input type="password" value={groupPassword} onChange={e=>setGroupPassword(e.target.value)} placeholder="Enter the group password" autoComplete="off" required={!participantId}/><small>Required for new participants. Ask an organizer for the current group password.</small></label>
+        <label>Participant password<input type="password" value={participantPassword} onChange={e=>setParticipantPassword(e.target.value)} placeholder="Create a password or enter your existing one" autoComplete="new-password" minLength={8} required/><small>Use at least 8 characters. Existing names require that participant’s password.</small></label>
+        {!duplicateParticipant && <label>Group password<input type="password" value={groupPassword} onChange={e=>setGroupPassword(e.target.value)} placeholder="Enter the group password" autoComplete="off"/><small>Required only when creating a new participant account.</small></label>}
         <label>What time can you arrive?<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)} required/><small>Please select your expected arrival time.</small></label>
-        <button className="primary" disabled={busy || !nameInput.trim() || !arrivalTime || (!participantId && !groupPassword)}>{busy ? "Joining…" : "Join game night"} <span>→</span></button>
-      </form>}
-      {duplicateParticipant && <div className="duplicate-prompt"><div><b>This name already exists</b><p>{duplicateParticipant.is_active === false ? <>A participant named <strong>{duplicateParticipant.name}</strong> already exists but is currently inactive. Ask an admin to restore that participant. You cannot create a duplicate.</> : <>A participant named <strong>{duplicateParticipant.name}</strong> is already registered. Would you like to request to use this existing participant instead? An admin must approve the link to protect the existing account.</>}</p></div><div className="duplicate-actions">{duplicateParticipant.is_active !== false && <button className="primary" disabled={busy} onClick={() => createLinkRequest(duplicateParticipant)}>Request existing participant</button>}<button className="secondary" onClick={() => { setDuplicateParticipant(null); setNameInput(""); }}>Choose another name</button></div></div>}
-      {pendingLink && <button className="secondary pending-cancel" onClick={switchName}>Cancel and switch session</button>}
+        <button className="primary" disabled={busy || !nameInput.trim() || !arrivalTime || participantPassword.length < 8}>{busy ? "Joining…" : duplicateParticipant ? "Continue" : "Join game night"} <span>→</span></button>
+      </form>
+      {duplicateParticipant && <div className="duplicate-prompt"><div><b>This participant already exists</b><p><strong>{duplicateParticipant.name}</strong> is already registered. Enter that participant's password to access the existing account. A new account will not be created.</p></div><div className="duplicate-actions"><button className="primary" disabled={busy || participantPassword.length < 8} onClick={signInToExistingParticipant}>Sign in to existing account</button><button className="secondary" onClick={() => { setDuplicateParticipant(null); setNameInput(""); setParticipantPassword(""); }}>Choose another name</button></div></div>}
     </section> : <>
       <div className="welcome"><div><small>YOU'RE IN</small><h2>Hey, {name} ✌️</h2></div><span className="live"><i/> LIVE BOARD</span></div>
       <section className="stats">
@@ -409,7 +446,7 @@ function App() {
         </section>
         <section className="panel voting"><div className="panel-title"><div><small>THE COMMUNITY PICKS</small><h2>Vote for games</h2></div><span className="tile gold"><Trophy/></span></div><p className="instruction"><i/> Vote for every game you'd like to play.</p>
           {!settings?.voting_open && <div className="closed">Voting is currently closed.</div>}
-          {!ranked.length ? <div className="empty"><Gamepad2 size={28}/><b>No games yet</b><span>Be the first to suggest one!</span></div> : <div className="game-list">{ranked.map((g,i)=><article className="game" key={g.id}><div className="rank">{i===0 && g.count ? <Trophy size={16}/> : String(i+1).padStart(2,"0")}</div><div className="game-info"><div className="game-heading"><b>{g.title}</b>{i===0 && g.count>0 && <small>LEADING</small>}</div>{g.description && <p>{g.description}</p>}<div className="byline">Suggested by {participants.find(p=>p.id===g.suggested_by)?.name || "a participant"}</div><div className="bar"><span style={{width:(g.count/max*100)+"%"}}/></div></div><div className="game-actions">{isAdmin && <button className="icon-action" title="Edit game" onClick={()=>updateGame(g)}><Pencil size={14}/></button>}{isAdmin && <button className="icon-action danger" title="Delete game" onClick={()=>deleteGame(g)}><Trash2 size={14}/></button>}<button className={"vote "+(g.mine?"selected":"")} onClick={()=>vote(g.id)} disabled={busy || !settings?.voting_open}>{g.mine?<Check size={16}/>:<ThumbsUp size={16}/>}<b>{g.count}</b></button></div></article>)}</div>}
+          {!ranked.length ? <div className="empty"><Gamepad2 size={28}/><b>No games yet</b><span>Be the first to suggest one!</span></div> : <div className="game-list">{ranked.map((g,i)=><article className="game" key={g.id}><div className="rank">{i===0 && g.count ? <Trophy size={16}/> : String(i+1).padStart(2,"0")}</div><div className="game-info"><div className="game-heading"><b>{g.title}</b>{i===0 && g.count>0 && <small>LEADING</small>}</div>{g.description && <p>{g.description}</p>}<div className="byline">Suggested by {participants.find(p=>p.id===g.suggested_by)?.name || "a participant"}</div><div className="bar"><span style={{width:(g.count/max*100)+"%"}}/></div></div><div className="game-actions">{showAdminControls && <button className="icon-action" title="Edit game" onClick={()=>updateGame(g)}><Pencil size={14}/></button>}{showAdminControls && <button className="icon-action danger" title="Delete game" onClick={()=>deleteGame(g)}><Trash2 size={14}/></button>}<button className={"vote "+(g.mine?"selected":"")} onClick={()=>vote(g.id)} disabled={busy || !settings?.voting_open}>{g.mine?<Check size={16}/>:<ThumbsUp size={16}/>}<b>{g.count}</b></button></div></article>)}</div>}
           <div className="footnote">You can change your vote anytime while voting is open.</div>
         </section>
       </div>
@@ -427,28 +464,25 @@ function App() {
               {!gameRounds.length && <p className="muted">No rounds recorded yet.</p>}
               {gameRounds.map(round => {
                 const results = placements.filter(p=>p.round_id===round.id).sort((a,b)=>a.place-b.place);
-                return <div className="round-card" key={round.id}><div className="round-heading"><div className="round-title"><b>Round {round.round_number}</b>{round.notes && <span>{round.notes}</span>}</div>{isAdmin && <div className="round-actions"><button className="icon-action" title="Edit round" onClick={()=>editRound(round)}><Pencil size={13}/></button><button className="icon-action danger" title="Delete round" onClick={()=>deleteRound(round)}><Trash2 size={13}/></button></div>}</div>
-                  {results.length ? <ol className="placement-list">{results.map(result=><li key={result.id}><span className="place-label">{result.place===1?"1st":result.place===2?"2nd":result.place===3?"3rd":result.place+"th"}</span><b>{participants.find(p=>p.id===result.participant_id)?.name || "Former participant"}</b>{result.score!==null && result.score!==undefined && <small>Score: {result.score}</small>}{result.notes && <small>{result.notes}</small>}{isAdmin && <div className="result-actions"><button className="icon-action" onClick={()=>editPlacement(result)} title="Edit result"><Pencil size={12}/></button><button className="icon-action danger" onClick={()=>deletePlacement(result)} title="Remove result"><Trash2 size={13}/></button></div>}</li>)}</ol> : <p className="muted">No placements entered for this round yet.</p>}
-                  {isAdmin && <div className="placement-form"><select value={placementDrafts[round.id]?.participant_id || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],participant_id:e.target.value,place:v[round.id]?.place||"1"}}))}><option value="">Select participant</option>{participants.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select><input type="number" min="1" step="1" placeholder="Place" value={placementDrafts[round.id]?.place || "1"} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],place:e.target.value}}))}/><input type="number" placeholder="Score (optional)" value={placementDrafts[round.id]?.score || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],score:e.target.value}}))}/><button className="secondary" onClick={()=>addPlacement(round)}>Add result</button></div>}
+                return <div className="round-card" key={round.id}><div className="round-heading"><div className="round-title"><b>Round {round.round_number}</b>{round.notes && <span>{round.notes}</span>}</div>{showAdminControls && <div className="round-actions"><button className="icon-action" title="Edit round" onClick={()=>editRound(round)}><Pencil size={13}/></button><button className="icon-action danger" title="Delete round" onClick={()=>deleteRound(round)}><Trash2 size={13}/></button></div>}</div>
+                  {results.length ? <ol className="placement-list">{results.map(result=><li key={result.id}><span className="place-label">{result.place===1?"1st":result.place===2?"2nd":result.place===3?"3rd":result.place+"th"}</span><b>{participants.find(p=>p.id===result.participant_id)?.name || "Former participant"}</b>{result.score!==null && result.score!==undefined && <small>Score: {result.score}</small>}{result.notes && <small>{result.notes}</small>}{showAdminControls && <div className="result-actions"><button className="icon-action" onClick={()=>editPlacement(result)} title="Edit result"><Pencil size={12}/></button><button className="icon-action danger" onClick={()=>deletePlacement(result)} title="Remove result"><Trash2 size={13}/></button></div>}</li>)}</ol> : <p className="muted">No placements entered for this round yet.</p>}
+                  {showAdminControls && <div className="placement-form"><select value={placementDrafts[round.id]?.participant_id || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],participant_id:e.target.value,place:v[round.id]?.place||"1"}}))}><option value="">Select participant</option>{participants.map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select><input type="number" min="1" step="1" placeholder="Place" value={placementDrafts[round.id]?.place || "1"} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],place:e.target.value}}))}/><input type="number" placeholder="Score (optional)" value={placementDrafts[round.id]?.score || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],score:e.target.value}}))}/><button className="secondary" onClick={()=>addPlacement(round)}>Add result</button></div>}
                 </div>;
               })}
             </div>}
-            {isAdmin && <div className="new-round"><input placeholder="Round notes (optional)" value={roundNotes[game.id]||""} onChange={e=>setRoundNotes(v=>({...v,[game.id]:e.target.value}))}/><button className="secondary" onClick={()=>createRound(game)}><Plus size={14}/> Add round</button></div>}
+            {showAdminControls && <div className="new-round"><input placeholder="Round notes (optional)" value={roundNotes[game.id]||""} onChange={e=>setRoundNotes(v=>({...v,[game.id]:e.target.value}))}/><button className="secondary" onClick={()=>createRound(game)}><Plus size={14}/> Add round</button></div>}
           </div>;
         })}
       </section>
 
-      {isAdmin && <section className="panel admin-panel"><div className="panel-title"><div><small>ADMINISTRATION</small><h2>Admin controls</h2></div><span className="tile"><Shield/></span></div>
+      {showAdminControls && <section className="panel admin-panel"><div className="panel-title"><div><small>ADMINISTRATION</small><h2>Admin controls</h2></div><span className="tile"><Shield/></span></div>
         <div className="admin-section"><h3><Shield size={16}/> Group password</h3><p className="muted">Set or replace the password required for new participant accounts. Existing participants stay signed in.</p><div className="admin-password-form"><input type="password" value={adminGroupPassword} onChange={e=>setAdminGroupPassword(e.target.value)} placeholder="New group password (6+ characters)" minLength={6} maxLength={200} autoComplete="new-password"/><button className="primary" disabled={adminGroupPassword.trim().length < 6} onClick={saveGroupPassword}>Save group password</button></div></div>
         <div className="admin-setting"><div><b>Voting status</b><p>{settings?.voting_open ? "Participants can currently vote." : "Voting is closed for everyone."}</p></div><button className="primary" onClick={toggleVoting}>{settings?.voting_open ? "Close voting" : "Open voting"}</button></div>
-        <div className="admin-section"><h3><UserCheck size={16}/> Participant link requests <span>{pendingRequests.length}</span></h3>
-          {!pendingRequests.length ? <p className="muted">No pending requests.</p> : pendingRequests.map(request=><div className="request-row" key={request.id}><div><b>{participants.find(p=>p.id===request.target_participant_id)?.name || "Existing participant"}</b><small>Requested by a new anonymous session · {new Date(request.requested_at).toLocaleString()}</small></div><div className="request-actions"><button className="secondary" onClick={()=>decideLink(request.id,false)}>Decline</button><button className="primary" onClick={()=>decideLink(request.id,true)}>Approve</button></div></div>)}
-        </div>
         <div className="admin-section"><h3><Shield size={16}/> Administrator access</h3><p className="muted">Promote trusted participants to admins. Admins can manage the board and other admin accounts. The last admin cannot be removed.</p>
           {participants.map(person => { const role = participantRoles.find(r => r.participant_id === person.id); const admin = !!role?.is_admin; return <div className="request-row" key={person.id}><div><b>{person.name}</b><small>{admin ? "Administrator" : "Participant"}</small></div><div className="request-actions"><button className={admin ? "secondary" : "primary"} onClick={()=>setParticipantAdmin(person,!admin)}>{admin ? "Remove admin" : "Promote to admin"}</button></div></div>; })}
         </div>
-        <div className="admin-section"><h3><Users size={16}/> Manage participants</h3>
-          {participants.map(person=><div className="request-row" key={person.id}><div><b>{person.name} {!person.is_active && <small className="inactive-label">INACTIVE</small>}</b><small>{person.arrival_time || "Arrival not set"}</small></div><div className="request-actions"><button className="icon-action" title="Edit name" onClick={()=>renameParticipant(person)}><Pencil size={14}/></button>{person.is_active === false ? <button className="secondary" onClick={()=>setParticipantActive(person,true)}><UserCheck size={14}/> Restore</button> : <button className="secondary" onClick={()=>setParticipantActive(person,false)}><UserX size={14}/> Remove</button>}</div></div>)}
+        <div className="admin-section"><h3><Users size={16}/> Manage participants</h3><p className="muted">Existing participants created before password sign-in do not have passwords yet. Set a password for each person here before they sign in on a new device.</p>
+          {participants.map(person=><div className="request-row" key={person.id}><div><b>{person.name} {!person.is_active && <small className="inactive-label">INACTIVE</small>}</b><small>{person.arrival_time || "Arrival not set"}</small></div><div className="request-actions"><button className="secondary" onClick={()=>resetParticipantPassword(person)}>Reset password</button><button className="icon-action" title="Edit name" onClick={()=>renameParticipant(person)}><Pencil size={14}/></button>{person.is_active === false ? <button className="secondary" onClick={()=>setParticipantActive(person,true)}><UserCheck size={14}/> Restore</button> : <button className="secondary" onClick={()=>setParticipantActive(person,false)}><UserX size={14}/> Remove</button>}</div></div>)}
         </div>
       </section>}
     </>}
