@@ -89,7 +89,7 @@ function App() {
       db.rpc("get_my_participant_id"),
       isAdmin ? db.rpc("admin_list_participant_roles") : Promise.resolve({ data: null, error: null })
     ]);
-    const issue = [s, p, g, v, r, rp, requests, current].find(x => x.error);
+    const issue = [s, p, g, v, r, rp, requests, current, roleResult].find(x => x.error);
     if (issue) setError(issue.error.message);
     if (s.data) setSettings(s.data);
     if (p.data) setParticipants(p.data);
