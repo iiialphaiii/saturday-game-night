@@ -152,6 +152,36 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!db || session) return;
+    let cancelled = false;
+    async function loadPublicGameNights() {
+      const { data, error: publicEventsError } = await db.from("game_nights").select("*").order("event_date", { ascending: true });
+      if (cancelled) return;
+      if (publicEventsError) {
+        setError(publicEventsError.message);
+        setLoading(false);
+        return;
+      }
+      const events = data || [];
+      setGameNights(events);
+      const now = new Date();
+      const today = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+      const existingSelection = events.find(event => event.id === selectedEventId);
+      const upcoming = events.filter(event => !event.is_archived && event.event_date >= today).sort((a,b) => a.event_date.localeCompare(b.event_date))[0];
+      const fallback = events.filter(event => !event.is_archived).sort((a,b) => b.event_date.localeCompare(a.event_date))[0] || events[0];
+      const activeEvent = existingSelection || upcoming || fallback || null;
+      setSelectedEventId(activeEvent?.id || null);
+      setSettings(activeEvent);
+      if (activeEvent?.event_date) {
+        setCalendarMonth(new Date(Number(activeEvent.event_date.slice(0,4)), Number(activeEvent.event_date.slice(5,7))-1, 1));
+      }
+      setLoading(false);
+    }
+    loadPublicGameNights();
+    return () => { cancelled = true; };
+  }, [session]);
+
+  useEffect(() => {
     if (!db || !session) return;
     refresh();
     const channel = db.channel("game-night-board")
@@ -313,6 +343,7 @@ function App() {
     const chosen=gameNights.find(event=>event.id===eventId);
     setSelectedEventId(eventId || null);setArrivalTime("");setEventArrivals([]);setCalendarOpen(false);setChatExpanded(false);setScoreboardMode(false);setError("");setNotice("");
     if(chosen) {
+      setSettings(chosen);
       setEventTitleDraft(chosen.event_title||"Saturday Game Night");
       setEventDateDraft(chosen.event_date||"");
       setEventTimeDraft(toInputEventTime(chosen.event_time));
