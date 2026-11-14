@@ -269,7 +269,7 @@ function App() {
   }
 
   function selectGameNight(eventId) {
-    setSelectedEventId(eventId);setCalendarOpen(false);setChatExpanded(false);setScoreboardMode(false);setError("");setNotice("");
+    setSelectedEventId(eventId);setArrivalTime("");setEventArrivals([]);setCalendarOpen(false);setChatExpanded(false);setScoreboardMode(false);setError("");setNotice("");
     const chosen=gameNights.find(event=>event.id===eventId);
     if(chosen) setCalendarMonth(new Date(Number(chosen.event_date.slice(0,4)),Number(chosen.event_date.slice(5,7))-1,1));
   }
