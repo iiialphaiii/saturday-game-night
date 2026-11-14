@@ -19,6 +19,8 @@ function App() {
   const [arrivalTime, setArrivalTime] = useState("19:00");
   const [participantId, setParticipantId] = useState(null);
   const [participants, setParticipants] = useState([]);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatDraft, setChatDraft] = useState("");
   const [games, setGames] = useState([]);
   const [votes, setVotes] = useState([]);
   const [settings, setSettings] = useState(null);
@@ -78,6 +80,7 @@ function App() {
   useEffect(() => {
     if (!db || !session) return;
     refresh();
+    loadChatMessages();
     const channel = db.channel("game-night-board")
       .on("postgres_changes", { event: "*", schema: "public", table: "games" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, refresh)
@@ -86,6 +89,7 @@ function App() {
       .on("postgres_changes", { event: "*", schema: "public", table: "game_rounds" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "game_round_placements" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "participant_link_requests" }, refresh)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "game_chat_messages" }, loadChatMessages)
       .subscribe();
     return () => db.removeChannel(channel);
   }, [session]);
@@ -135,6 +139,35 @@ function App() {
       }
     }
     setLoading(false);
+  }
+
+  async function loadChatMessages() {
+    if (!db || !session) return;
+    const { data, error: chatError } = await db.from("game_chat_messages").select("*").order("created_at", { ascending: false }).limit(100);
+    if (chatError) setError(chatError.message);
+    else setChatMessages((data || []).reverse());
+  }
+
+  async function sendChatMessage(e) {
+    e.preventDefault();
+    const message = chatDraft.trim();
+    if (!message || !participantId || !name) return;
+    if (message.length > 1000) { setError("Messages must be 1,000 characters or fewer."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const { error: sendError } = await db.from("game_chat_messages").insert({ participant_id: participantId, sender_name: name, message });
+      if (sendError) throw sendError;
+      setChatDraft("");
+      await loadChatMessages();
+    } catch (err) {
+      setError(err.message || "Unable to send your message.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function formatChatTimestamp(value) {
+    return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
   }
 
   function toInputTime(value) {
@@ -637,6 +670,7 @@ function App() {
       </section>}
       </>}
     </>}
+    {session && participantId && !accountMode && <section className="panel game-chat-panel"><div className="panel-title"><div><small>THE GROUP CHAT</small><h2>Game Night Chat</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Send a message to everyone in the group.</p><div className="chat-message-list" aria-live="polite">{chatMessages.length ? chatMessages.map(msg=><article className={"chat-message"+(msg.participant_id===participantId?" own":"")} key={msg.id}><div className="chat-message-meta"><b>{msg.sender_name}</b><time dateTime={msg.created_at}>{formatChatTimestamp(msg.created_at)}</time></div><p>{msg.message}</p></article>) : <p className="chat-empty">No messages yet. Start the conversation!</p>}</div><form className="chat-compose" onSubmit={sendChatMessage}><textarea value={chatDraft} onChange={e=>setChatDraft(e.target.value)} maxLength={1000} rows={2} placeholder="Write a message..." aria-label="Chat message" required/><button className="primary" disabled={busy || !chatDraft.trim()}>Send message</button></form></section>}
     {(error||notice)&&<div className={"toast "+(error?"bad":"")}>{error||notice}<button onClick={()=>{setError("");setNotice("");}}>×</button></div>}
     <footer><span>MADE FOR GOOD COMPANY.</span><button onClick={refresh}><RefreshCw size={13}/> Refresh board</button></footer>
   </main>;
