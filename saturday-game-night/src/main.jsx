@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import { Gamepad2, Plus, ThumbsUp, Users, Trophy, CalendarDays, Clock3, RefreshCw, LogOut, Check, Sparkles, Info, Shield, Settings, Trash2, Pencil, MapPin, ChevronDown, ChevronUp, Medal, UserCheck, UserX } from "lucide-react";
 import "./styles.css";
+import { APP_VERSION } from "./version.js";
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -1005,7 +1006,7 @@ function App() {
     </>}
     {session && participantId && name && !accountMode && <section className={"panel game-chat-panel"+(chatExpanded?" expanded":"")}><div className="panel-title"><div><small>THE GROUP CHAT</small><h2>Game Night Chat</h2></div><button type="button" className="chat-toggle secondary" onClick={()=>setChatExpanded(v=>!v)}>{chatExpanded?"Show latest 3":"View chat history"}</button></div><p className="muted">Send a message to everyone in the group.</p><div className="chat-message-list" aria-live="polite">{chatMessages.length ? (chatExpanded ? chatMessages : chatMessages.slice(-3)).map(msg=><article className={"chat-message"+(msg.participant_id===participantId?" own":"")} key={msg.id}><div className="chat-message-meta"><b>{msg.sender_name}</b><time dateTime={msg.created_at}>{formatChatTimestamp(msg.created_at)}</time></div><p>{msg.message}</p></article>) : <p className="chat-empty">No messages yet. Start the conversation!</p>}</div><form className="chat-compose" onSubmit={sendChatMessage}><textarea value={chatDraft} onChange={e=>setChatDraft(e.target.value)} maxLength={1000} rows={2} placeholder={settings?.is_archived?"Archived chat is read-only":"Write a message..."} aria-label="Chat message" required disabled={settings?.is_archived}/><button className="primary" disabled={busy || !chatDraft.trim() || settings?.is_archived}>Send message</button></form></section>}
     {(error||notice)&&<div className={"toast "+(error?"bad":"")}>{error||notice}<button onClick={()=>{setError("");setNotice("");}}>×</button></div>}
-    <footer><span>MADE BY PETER TRAN.</span><button onClick={refresh}><RefreshCw size={13}/> Refresh board</button></footer>
+    <footer><span>MADE BY PETER TRAN v.{APP_VERSION}.</span><button onClick={refresh}><RefreshCw size={13}/> Refresh board</button></footer>
   </main>;
 }
 
