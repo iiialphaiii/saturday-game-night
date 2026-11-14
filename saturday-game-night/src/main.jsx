@@ -39,6 +39,9 @@ function App() {
   const [placementDrafts, setPlacementDrafts] = useState({});
   const [groupPassword, setGroupPassword] = useState("");
   const [participantPassword, setParticipantPassword] = useState("");
+  const [currentPasswordDraft, setCurrentPasswordDraft] = useState("");
+  const [newPasswordDraft, setNewPasswordDraft] = useState("");
+  const [confirmPasswordDraft, setConfirmPasswordDraft] = useState("");
   const [adminGroupPassword, setAdminGroupPassword] = useState("");
   const [participantRoles, setParticipantRoles] = useState([]);
   const [adminMode, setAdminMode] = useState(true);
@@ -287,6 +290,37 @@ function App() {
     setArrivalTime("19:00");
   }
 
+  async function changeMyPassword(e) {
+    e.preventDefault();
+    if (newPasswordDraft.length < 8 || newPasswordDraft.length > 200) {
+      setError("New password must be at least 8 characters and no more than 200 characters.");
+      return;
+    }
+    if (newPasswordDraft !== confirmPasswordDraft) {
+      setError("The new password and confirmation do not match.");
+      return;
+    }
+    if (currentPasswordDraft === newPasswordDraft) {
+      setError("Your new password must be different from your current password.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const { data, error: changeError } = await db.rpc("change_my_participant_password", {
+        p_current_password: currentPasswordDraft,
+        p_new_password: newPasswordDraft
+      });
+      if (changeError) throw changeError;
+      if (!data) throw new Error("Your current password is incorrect. Please try again.");
+      setCurrentPasswordDraft(""); setNewPasswordDraft(""); setConfirmPasswordDraft("");
+      setNotice("Your password has been updated. Other devices will need to sign in again using the new password.");
+    } catch (err) {
+      setError(err.message || "Unable to update your password.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveEventDetails() {
     if (!eventDateDraft || !eventTimeDraft) {
       setError("Please enter both the game night date and time.");
@@ -500,6 +534,16 @@ function App() {
       <section className="panel crew"><div className="crew-head"><div><small>THE CREW</small><h2>Who's playing?</h2></div><span>{activeParticipants.length} {activeParticipants.length===1?"person":"people"}</span></div>
         <div className="people">{activeParticipants.map((p,i)=><div className="person" key={p.id}><span className={"avatar a"+(i%5)}>{p.name.charAt(0).toUpperCase()}</span><span className="person-detail"><b>{p.name}{p.id===participantId && <em>YOU</em>}</b><small><Clock3 size={12}/> Arriving at {p.arrival_time || "Time not confirmed"}</small></span></div>)}</div>
         <form className="arrival-update" onSubmit={join}><label>Update your arrival time<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)}/></label><button className="secondary" disabled={busy}>Save arrival time</button><span className="locked-name">Your participant name cannot be changed.</span></form>
+      </section>
+      <section className="panel account-password-panel">
+        <div className="panel-title"><div><small>ACCOUNT SETTINGS</small><h2>Change password</h2></div><span className="tile"><Shield size={18}/></span></div>
+        <p className="muted">Update the password used to access your participant account. Other devices will need to sign in again with your new password.</p>
+        <form className="change-password-form" onSubmit={changeMyPassword}>
+          <label>Current password<input type="password" value={currentPasswordDraft} onChange={e=>setCurrentPasswordDraft(e.target.value)} autoComplete="current-password" required/></label>
+          <label>New password<input type="password" value={newPasswordDraft} onChange={e=>setNewPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/><small>At least 8 characters.</small></label>
+          <label>Confirm new password<input type="password" value={confirmPasswordDraft} onChange={e=>setConfirmPasswordDraft(e.target.value)} autoComplete="new-password" minLength={8} maxLength={200} required/></label>
+          <button className="primary" type="submit" disabled={busy || !currentPasswordDraft || newPasswordDraft.length<8 || !confirmPasswordDraft}>{busy ? "Updating…" : "Update password"}</button>
+        </form>
       </section>
 
       <section className="panel history"><div className="crew-head"><div><small>THE SCOREBOARD</small><h2>Game round history</h2></div><span>{rounds.length} rounds recorded</span></div>
