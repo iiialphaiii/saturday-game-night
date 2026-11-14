@@ -181,7 +181,8 @@ function App() {
     setGameNights(events);
     let activeId = selectedEventId;
     if (!activeId || !events.some(event=>event.id===activeId)) {
-      const now = new Date();\n      const today = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
+      const now = new Date();
+      const today = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
       const upcoming = events.filter(event=>!event.is_archived && event.event_date>=today).sort((a,b)=>a.event_date.localeCompare(b.event_date))[0];
       const fallback = events.filter(event=>!event.is_archived).sort((a,b)=>b.event_date.localeCompare(a.event_date))[0] || events[0];
       activeId = (upcoming || fallback)?.id || null;
