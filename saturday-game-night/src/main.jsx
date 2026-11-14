@@ -13,11 +13,26 @@ const normalizeName = value => value.trim().replace(/\s+/g, " ").toLocaleLowerCa
 function ArrivalTimePicker({ value, onChange }) {
   const getParts = raw => {
     if (!raw) return { hour: "", minute: "", period: "" };
-    const [rawHour, rawMinute] = raw.split(":").map(Number);
+    // Accept both normalized 24-hour values (19:00) and stored/display
+    // values with an explicit suffix (7:00 PM). Do not infer AM/PM from
+    // the numeric hour when a suffix is present.
+    const match = String(raw).trim().match(/^(\\d{1,2}):(\\d{2})(?::\\d{2})?\\s*(AM|PM)?$/i);
+    if (!match) return { hour: "", minute: "", period: "" };
+    let hour24 = Number(match[1]);
+    const minute = Number(match[2]);
+    const suffix = match[3]?.toUpperCase();
+    if (minute > 59) return { hour: "", minute: "", period: "" };
+    if (suffix) {
+      if (hour24 < 1 || hour24 > 12) return { hour: "", minute: "", period: "" };
+      if (suffix === "PM" && hour24 < 12) hour24 += 12;
+      if (suffix === "AM" && hour24 === 12) hour24 = 0;
+    } else if (hour24 > 23) {
+      return { hour: "", minute: "", period: "" };
+    }
     return {
-      hour: String(rawHour % 12 || 12),
-      minute: String(rawMinute).padStart(2, "0"),
-      period: rawHour >= 12 ? "PM" : "AM"
+      hour: String(hour24 % 12 || 12),
+      minute: String(minute).padStart(2, "0"),
+      period: hour24 >= 12 ? "PM" : "AM"
     };
   };
   const [parts, setParts] = useState(() => getParts(value));
