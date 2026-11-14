@@ -143,9 +143,9 @@ function App() {
 
   async function loadChatMessages() {
     if (!db || !session) return;
-    const { data, error: chatError } = await db.from("game_chat_messages").select("*").order("created_at", { ascending: true }).limit(100);
+    const { data, error: chatError } = await db.from("game_chat_messages").select("*").order("created_at", { ascending: false }).limit(100);
     if (chatError) setError(chatError.message);
-    else setChatMessages(data || []);
+    else setChatMessages((data || []).reverse());
   }
 
   async function sendChatMessage(e) {
