@@ -99,3 +99,8 @@ The app continues to use anonymous sign-in. Because anonymous sessions are devic
 - Participants created before password sign-in was added do not have a participant password yet. An admin must reset/set a password for each existing participant before they can sign in from a new browser or device. Existing active sessions continue to work.
 - Admins can select **Switch to normal mode** in the top bar to hide all admin-only buttons and controls while using the board as a regular participant. Select **Switch to admin mode** to show them again. This does not remove administrator permissions.
 - Apply `supabase/migrations/20261113_participant_passwords.sql` after the group-password migration, then `supabase/migrations/20261113_participant_alias_admin_role_sync.sql`, `supabase/migrations/20261113_participant_password_reset_revoke_sessions.sql`, and `supabase/migrations/20261113_participant_password_reset_attempt_cleanup.sql` on a fresh project. The connected Game Night Supabase project has already received these migrations. The role-sync migration preserves administrator access when an admin reconnects on a new device using their participant password; the reset migrations require old device aliases to sign in again after an admin resets a password.
+
+
+## Game night event details
+
+Admins can update the shared game night date, start time, and optional location from **Admin controls → Game night details**. The date, time, and location are shown in the event header for all participants. The location field can contain a venue name, address, or meeting place. Only users with the trusted admin role can update these settings.
