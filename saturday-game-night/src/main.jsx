@@ -161,7 +161,7 @@ function App() {
 
       const { data: allParticipants, error: peopleError } = await db.from("participants").select("id,name,is_active");
       if (peopleError) throw peopleError;
-      const match = (allParticipants || []).find(p => p.is_active && normalizeName(p.name) === normalizeName(clean));
+      const match = (allParticipants || []).find(p => normalizeName(p.name) === normalizeName(clean));
       if (match) {
         setDuplicateParticipant(match);
         return;
@@ -173,7 +173,7 @@ function App() {
       if (insertError) {
         if (insertError.code === "23505") {
           const { data: refreshedPeople } = await db.from("participants").select("id,name,is_active");
-          const duplicate = refreshedPeople?.find(p => p.is_active && normalizeName(p.name) === normalizeName(clean));
+          const duplicate = refreshedPeople?.find(p => normalizeName(p.name) === normalizeName(clean));
           if (duplicate) { setDuplicateParticipant(duplicate); return; }
         }
         throw insertError;
@@ -325,7 +325,7 @@ function App() {
         <label>What time can you arrive?<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)} required/><small>Please select your expected arrival time.</small></label>
         <button className="primary" disabled={busy || !nameInput.trim() || !arrivalTime}>{busy ? "Joining…" : "Join game night"} <span>→</span></button>
       </form>}
-      {duplicateParticipant && <div className="duplicate-prompt"><div><b>This name already exists</b><p>A participant named <strong>{duplicateParticipant.name}</strong> is already registered. Would you like to request to use this existing participant instead? An admin must approve the link to protect the existing account.</p></div><div className="duplicate-actions"><button className="primary" disabled={busy} onClick={() => createLinkRequest(duplicateParticipant)}>Request existing participant</button><button className="secondary" onClick={() => { setDuplicateParticipant(null); setNameInput(""); }}>Choose another name</button></div></div>}
+      {duplicateParticipant && <div className="duplicate-prompt"><div><b>This name already exists</b><p>{duplicateParticipant.is_active === false ? <>A participant named <strong>{duplicateParticipant.name}</strong> already exists but is currently inactive. Ask an admin to restore that participant. You cannot create a duplicate.</> : <>A participant named <strong>{duplicateParticipant.name}</strong> is already registered. Would you like to request to use this existing participant instead? An admin must approve the link to protect the existing account.</>}</p></div><div className="duplicate-actions">{duplicateParticipant.is_active !== false && <button className="primary" disabled={busy} onClick={() => createLinkRequest(duplicateParticipant)}>Request existing participant</button>}<button className="secondary" onClick={() => { setDuplicateParticipant(null); setNameInput(""); }}>Choose another name</button></div></div>}
       {pendingLink && <button className="secondary pending-cancel" onClick={switchName}>Cancel and switch session</button>}
     </section> : <>
       <div className="welcome"><div><small>YOU'RE IN</small><h2>Hey, {name} ✌️</h2></div><span className="live"><i/> LIVE BOARD</span></div>
