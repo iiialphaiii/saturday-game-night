@@ -128,7 +128,7 @@ drop trigger if exists protect_participant_name on public.participants;
 create trigger protect_participant_name before update on public.participants for each row execute function private.protect_participant_name();
 
 create or replace function public.admin_decide_participant_link_request(p_request_id bigint, p_approve boolean)
-returns void language plpgsql security definer set search_path = ''
+returns void language plpgsql security invoker set search_path = ''
 as $$
 declare v_request public.participant_link_requests%rowtype;
 begin
