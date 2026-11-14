@@ -297,7 +297,7 @@ function App() {
 
   async function updateMyParticipantName(e) {
     e.preventDefault();
-    const clean = participantNameDraft.trim().replace(/\\s+/g, " ");
+    const clean = participantNameDraft.trim().replace(/\s+/g, " ");
     if (!clean) { setError("Name cannot be blank."); return; }
     if (clean.length > 80) { setError("Name must be 80 characters or fewer."); return; }
     if (normalizeName(clean) === normalizeName(name)) {
