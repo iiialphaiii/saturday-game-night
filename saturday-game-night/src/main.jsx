@@ -785,13 +785,13 @@ function App() {
         await refresh();
         return;
       }
-      const { error: insertError } = await db.from("game_round_placements").insert({
+      const { data: insertedPlacement, error: insertError } = await db.from("game_round_placements").insert({
         round_id: round.id,
         participant_id: draft.participant_id,
         place: Number(draft.place),
         score: draft.score === "" ? null : Number(draft.score),
         notes: draft.notes?.trim() || null
-      });
+      }).select("*").single();
       if (insertError) {
         if (insertError.code === "23505") {
           setPlacementDrafts(v => ({ ...v, [round.id]: { ...v[round.id], participant_id: "" } }));
@@ -801,6 +801,9 @@ function App() {
         }
         throw insertError;
       }
+      // Update local state immediately so this participant disappears from this
+      // round's dropdown without waiting for the next full refresh to finish.
+      setPlacements(current => [...current.filter(item => !(String(item.round_id) === String(round.id) && String(item.participant_id) === String(draft.participant_id))), insertedPlacement]);
       setPlacementDrafts(v => ({ ...v, [round.id]: { participant_id: "", place: "1", score: "", notes: "" } }));
       setNotice("Round result saved.");
       await refresh();
