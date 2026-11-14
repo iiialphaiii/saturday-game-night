@@ -181,7 +181,7 @@ function App() {
     setGameNights(events);
     let activeId = selectedEventId;
     if (!activeId || !events.some(event=>event.id===activeId)) {
-      const today = new Date().toLocaleDateString("en-CA");
+      const now = new Date();\n      const today = now.getFullYear()+"-"+String(now.getMonth()+1).padStart(2,"0")+"-"+String(now.getDate()).padStart(2,"0");
       const upcoming = events.filter(event=>!event.is_archived && event.event_date>=today).sort((a,b)=>a.event_date.localeCompare(b.event_date))[0];
       const fallback = events.filter(event=>!event.is_archived).sort((a,b)=>b.event_date.localeCompare(a.event_date))[0] || events[0];
       activeId = (upcoming || fallback)?.id || null;
@@ -815,7 +815,7 @@ function App() {
         <div className="people">{activeParticipants.map((p,i)=><div className="person" key={p.id}><span className={"avatar a"+(i%5)}>{p.name.charAt(0).toUpperCase()}</span><span className="person-detail"><b>{p.name}{p.id===participantId && <em>YOU</em>}{p.slogan && <span className="person-slogan"> · {p.slogan}</span>}<span className="person-role">{displayRoles.find(r => r.participant_id === p.id)?.role_label || "Participant"}</span></b><small><Clock3 size={12}/> Arriving at {p.arrival_time || "Time not confirmed"}</small></span></div>)}</div>
         <form className="arrival-update" onSubmit={join}><label>Update your arrival time<ArrivalTimePicker value={arrivalTime} onChange={setArrivalTime}/><small>{arrivalTime ? "Current saved time: " + formatTime(arrivalTime) : "Please select a time."}</small></label><button className="secondary" disabled={busy}>Save arrival time</button></form>
       </section>
-      <section className={"panel history "+(scoreboardMode?"scoreboard-editing":"")}><div className="crew-head"><div><small>THE SCOREBOARD</small><h2>Game round history</h2></div><div className="scoreboard-heading-actions"><span>{rounds.length} rounds recorded</span><button className={"admin-mode-toggle scoreboard-edit-button "+(scoreboardMode?"active":"")} onClick={toggleScoreboardEditing} disabled={busy}><Trophy size={14}/>{scoreboardMode?"Done editing":"Edit scoreboard"}</button></div></div>{scoreboardMode && <p className="scoreboard-edit-hint">Editing mode is on. Open a game below to add rounds or update placements and scores.</p>}
+      <section className={"panel history "+(scoreboardMode?"scoreboard-editing":"")}><div className="crew-head"><div><small>THE SCOREBOARD</small><h2>Game round history</h2></div><div className="scoreboard-heading-actions"><span>{rounds.length} rounds recorded</span><button className={"admin-mode-toggle scoreboard-edit-button "+(scoreboardMode?"active":"")} onClick={toggleScoreboardEditing} disabled={busy || settings?.is_archived}><Trophy size={14}/>{scoreboardMode?"Done editing":"Edit scoreboard"}</button></div></div>{scoreboardMode && <p className="scoreboard-edit-hint">Editing mode is on. Open a game below to add rounds or update placements and scores.</p>}
         {games.map(game => {
           const gameRounds = rounds.filter(r => r.game_id === game.id).sort((a,b)=>a.round_number-b.round_number);
           return <div className="history-game" key={game.id}><div className="history-game-head"><b>{game.title}</b><span>{gameRounds.length} {gameRounds.length===1?"round":"rounds"}</span><button className="text-action" onClick={()=>setExpandedRounds(v=>({...v,[game.id]:!v[game.id]}))}>{expandedRounds[game.id] ? <ChevronUp size={15}/> : <ChevronDown size={15}/>} {expandedRounds[game.id] ? "Hide" : "View"}</button></div>
