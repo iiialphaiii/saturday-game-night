@@ -91,10 +91,18 @@ create policy "Admins can manage votes" on public.votes for all to authenticated
 drop policy if exists "Admins can manage event settings" on public.event_settings;
 create policy "Admins can manage event settings" on public.event_settings for update to authenticated using ((auth.jwt()->'app_metadata'->>'role') = 'admin') with check ((auth.jwt()->'app_metadata'->>'role') = 'admin');
 
-drop policy if exists "Users can read own participant aliases" on private.participant_aliases;
-create policy "Users can read own participant aliases" on private.participant_aliases for select to authenticated using (auth_user_id = auth.uid() or (auth.jwt()->'app_metadata'->>'role') = 'admin');
-drop policy if exists "Admins can create participant aliases" on private.participant_aliases;
-create policy "Admins can create participant aliases" on private.participant_aliases for insert to authenticated with check ((auth.jwt()->'app_metadata'->>'role') = 'admin');
+create or replace function private.admin_link_participant_alias(p_requester_id uuid, p_target_participant_id uuid)
+returns void language plpgsql security definer set search_path = ''
+as $
+begin
+  if coalesce((auth.jwt()->'app_metadata'->>'role'), '') <> 'admin' then raise exception 'Administrator access required.'; end if;
+  insert into private.participant_aliases(auth_user_id, participant_id, approved_by)
+  values (p_requester_id, p_target_participant_id, auth.uid())
+  on conflict (auth_user_id) do nothing;
+end;
+$;
+revoke all on function private.admin_link_participant_alias(uuid, uuid) from public;
+grant execute on function private.admin_link_participant_alias(uuid, uuid) to authenticated;
 
 drop policy if exists "Users can read own link requests or admins can read all" on public.participant_link_requests;
 create policy "Users can read own link requests or admins can read all" on public.participant_link_requests for select to authenticated using (requester_id = auth.uid() or (auth.jwt()->'app_metadata'->>'role') = 'admin');
@@ -136,9 +144,7 @@ begin
   select * into v_request from public.participant_link_requests where id = p_request_id and status = 'pending' for update;
   if not found then raise exception 'This request is no longer pending.'; end if;
   if p_approve then
-    insert into private.participant_aliases(auth_user_id, participant_id, approved_by)
-    values (v_request.requester_id, v_request.target_participant_id, auth.uid())
-    on conflict (auth_user_id) do update set participant_id = excluded.participant_id, approved_by = excluded.approved_by, created_at = now();
+    perform private.admin_link_participant_alias(v_request.requester_id, v_request.target_participant_id);
   end if;
   update public.participant_link_requests set status = case when p_approve then 'approved' else 'rejected' end, decided_at = now(), decided_by = auth.uid() where id = p_request_id;
 end;
