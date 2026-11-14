@@ -59,3 +59,5 @@
 .vote-audit>div:last-child b{color:#ff9ba8}
 .vote-audit span{overflow-wrap:anywhere}
 @media(max-width:600px){.game-actions{flex-wrap:wrap}.vote-actions{width:100%}.vote-actions .vote{flex:1}}
+
+.net-vote-score{margin-top:6px;color:#bfc3d2;font-size:11px}.net-vote-score strong{color:#f3efff;font-size:15px;font-variant-numeric:tabular-nums}.net-vote-score span{color:#8f95a8;font-size:10px}
