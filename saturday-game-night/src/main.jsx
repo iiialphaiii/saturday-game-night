@@ -768,29 +768,47 @@ function App() {
   }
 
   async function addPlacement(round) {
+    if (busy) return;
     const draft = placementDrafts[round.id] || {};
     if (settings?.is_archived) { setError("Archived Game Nights are read-only."); return; }
     if (!draft.participant_id || !draft.place || !Number.isInteger(Number(draft.place)) || Number(draft.place) < 1) { setError("Choose a participant and a whole-number placement greater than zero."); return; }
-    // Re-check the latest database state immediately before inserting. The dropdown
-    // filter is only a convenience; this guard prevents stale UI state from adding
-    // the same participant twice to one round.
-    const { data: existingPlacement, error: lookupError } = await db.from("game_round_placements").select("id").eq("round_id", round.id).eq("participant_id", draft.participant_id).maybeSingle();
-    if (lookupError) { setError(lookupError.message); return; }
-    if (existingPlacement) {
-      setPlacementDrafts(v => ({ ...v, [round.id]: { ...v[round.id], participant_id: "" } }));
-      setError("This participant already has a result in this round. Remove their existing result before adding them again.");
+    setBusy(true); setError(""); setNotice("");
+    try {
+      // Re-check the latest database state immediately before inserting. The dropdown
+      // filter is only a convenience; this guard prevents stale UI state from adding
+      // the same participant twice to one round.
+      const { data: existingPlacement, error: lookupError } = await db.from("game_round_placements").select("id").eq("round_id", round.id).eq("participant_id", draft.participant_id).maybeSingle();
+      if (lookupError) throw lookupError;
+      if (existingPlacement) {
+        setPlacementDrafts(v => ({ ...v, [round.id]: { ...v[round.id], participant_id: "" } }));
+        setError("This participant already has a result in this round. Remove their existing result before adding them again.");
+        await refresh();
+        return;
+      }
+      const { error: insertError } = await db.from("game_round_placements").insert({
+        round_id: round.id,
+        participant_id: draft.participant_id,
+        place: Number(draft.place),
+        score: draft.score === "" ? null : Number(draft.score),
+        notes: draft.notes?.trim() || null
+      });
+      if (insertError) {
+        if (insertError.code === "23505") {
+          setPlacementDrafts(v => ({ ...v, [round.id]: { ...v[round.id], participant_id: "" } }));
+          setError("This participant already has a result in this round. Remove their existing result before adding them again.");
+          await refresh();
+          return;
+        }
+        throw insertError;
+      }
+      setPlacementDrafts(v => ({ ...v, [round.id]: { participant_id: "", place: "1", score: "", notes: "" } }));
+      setNotice("Round result saved.");
       await refresh();
-      return;
+    } catch (err) {
+      setError(err.message || "Unable to save this round result.");
+    } finally {
+      setBusy(false);
     }
-    const { error: e } = await db.from("game_round_placements").insert({
-      round_id: round.id,
-      participant_id: draft.participant_id,
-      place: Number(draft.place),
-      score: draft.score === "" ? null : Number(draft.score),
-      notes: draft.notes?.trim() || null
-    });
-    if (e) setError(e.message);
-    else { setPlacementDrafts(v => ({ ...v, [round.id]: { participant_id: "", place: "1", score: "", notes: "" } })); setNotice("Round result saved."); await refresh(); }
   }
 
   async function editPlacement(placement) {
@@ -888,7 +906,7 @@ function App() {
                 const results = placements.filter(p=>String(p.round_id)===String(round.id)).sort((a,b)=>{ const placeOrder=Number(a.place)-Number(b.place); if(placeOrder!==0) return placeOrder; const scoreA=a.score===null||a.score===undefined||a.score===""?Number.NEGATIVE_INFINITY:Number(a.score); const scoreB=b.score===null||b.score===undefined||b.score===""?Number.NEGATIVE_INFINITY:Number(b.score); return scoreB-scoreA; });
                 return <div className="round-card" key={round.id}><div className="round-heading"><div className="round-title"><b>Round {round.round_number}</b>{round.notes && <span>{round.notes}</span>}</div>{canManageScoreboard && <div className="round-actions"><button className="icon-action" title="Edit round" onClick={()=>editRound(round)}><Pencil size={13}/></button><button className="icon-action danger" title="Delete round" onClick={()=>deleteRound(round)}><Trash2 size={13}/></button></div>}</div>
                   {results.length ? <ol className="placement-list">{results.map(result=><li key={result.id}><span className="place-label">{result.place===1?"1st":result.place===2?"2nd":result.place===3?"3rd":result.place+"th"}</span><b>{participants.find(p=>p.id===result.participant_id)?.name || "Former participant"}</b>{result.score!==null && result.score!==undefined && <small>Score: {result.score}</small>}{result.notes && <small>{result.notes}</small>}{canManageScoreboard && <div className="result-actions"><button className="icon-action" onClick={()=>editPlacement(result)} title="Edit result"><Pencil size={12}/></button><button className="icon-action danger" onClick={()=>deletePlacement(result)} title="Remove result"><Trash2 size={13}/></button></div>}</li>)}</ol> : <p className="muted">No placements entered for this round yet.</p>}
-                  {canManageScoreboard && <div className="placement-form"><select value={placementDrafts[round.id]?.participant_id || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],participant_id:e.target.value,place:v[round.id]?.place??"1"}}))}><option value="">Select participant</option>{goingParticipants.filter(p=>!placements.some(existing=>String(existing.round_id)===String(round.id)&&String(existing.participant_id)===String(p.id))).map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select><input type="number" min="1" step="1" placeholder="Place" value={placementDrafts[round.id]?.place ?? "1"} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],place:e.target.value}}))}/><input type="number" placeholder="Score (optional)" value={placementDrafts[round.id]?.score || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],score:e.target.value}}))}/><button className="secondary" onClick={()=>addPlacement(round)}>Add result</button></div>}
+                  {canManageScoreboard && <div className="placement-form"><select value={placementDrafts[round.id]?.participant_id || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],participant_id:e.target.value,place:v[round.id]?.place??"1"}}))}><option value="">Select participant</option>{goingParticipants.filter(p=>!placements.some(existing=>String(existing.round_id)===String(round.id)&&String(existing.participant_id)===String(p.id))).map(p=><option value={p.id} key={p.id}>{p.name}</option>)}</select><input type="number" min="1" step="1" placeholder="Place" value={placementDrafts[round.id]?.place ?? "1"} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],place:e.target.value}}))}/><input type="number" placeholder="Score (optional)" value={placementDrafts[round.id]?.score || ""} onChange={e=>setPlacementDrafts(v=>({...v,[round.id]:{...v[round.id],score:e.target.value}}))}/><button className="secondary" onClick={()=>addPlacement(round)} disabled={busy}>Add result</button></div>}
                 </div>;
               })}
             </div>}
