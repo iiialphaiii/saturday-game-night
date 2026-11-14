@@ -55,7 +55,7 @@ The feature branch \`feature/admin-round-history\` adds:
 - Administrator-only game editing/deletion, voting open/close, participant name corrections and active-list removal/restoration.
 - Per-game round history with unlimited round numbers, placements (including ties), optional scores, and notes.
 - Case-insensitive, whitespace-normalized participant name matching. A duplicate name cannot create a second participant.
-- A duplicate-name request flow. Selecting an existing name sends an approval request; it does not immediately grant access to another participant's profile.
+- Existing participant names require the participant password before a new browser/device session can access that profile. Names are matched case-insensitively and duplicate accounts cannot be created.
 - Database-level name protection and normalized-name uniqueness.
 
 ### Apply the feature migration to another Supabase project
@@ -77,7 +77,7 @@ where p.id = u.id
 
 Reload the app after the role change. The app refreshes the current session token at startup so the new JWT includes the admin claim; do not sign out of the anonymous admin session, because anonymous accounts are browser/device-specific. Admins can correct their own name from the Admin controls. Keep admin access limited to trusted organizers.
 
-The app continues to use anonymous sign-in. Because anonymous sessions are device/browser-specific, an existing participant link request requires an administrator to approve the association. An admin should approve only after verifying who is making the request in person or through a trusted channel.
+The app continues to use anonymous sign-in. Because anonymous sessions are device/browser-specific, participants use their participant name and password to reconnect from another browser or device. A participant password is stored as a bcrypt hash in the private schema. Password verification is rate-limited (five failed attempts trigger a 15-minute lockout).
 
 
 ## Group password and administrator management
@@ -89,3 +89,13 @@ The app continues to use anonymous sign-in. Because anonymous sessions are devic
 - Admins can promote participants or remove admin access in **Admin controls → Administrator access**. Admin roles are stored in trusted Supabase Auth app metadata, not user-editable profile metadata. The last administrator cannot be removed.
 - When an admin promotes someone, that person should reload the app (or refresh their session) to receive the updated administrator claim. Role removal takes effect when the affected user's access token refreshes.
 - Apply `supabase/migrations/20261113_group_password_and_admin_management.sql` after the existing admin/round-history migration on a fresh project. The connected Game Night Supabase project has already received these changes.
+
+ 
+## Participant passwords and normal admin mode
+
+- When creating a participant for the first time, choose a participant password of at least eight characters and enter the group password.
+- When a name already exists, enter that participant's password to sign in to the existing profile. A name alone never grants access, and no duplicate participant is created.
+- Passwords are stored as bcrypt hashes in the private schema. Admins can use **Admin controls → Manage participants → Reset password** to set a new password for a participant.
+- Participants created before password sign-in was added do not have a participant password yet. An admin must reset/set a password for each existing participant before they can sign in from a new browser or device. Existing active sessions continue to work.
+- Admins can select **Switch to normal mode** in the top bar to hide all admin-only buttons and controls while using the board as a regular participant. Select **Switch to admin mode** to show them again. This does not remove administrator permissions.
+- Apply `supabase/migrations/20261113_participant_passwords.sql` after the group-password migration on a fresh project. The connected Game Night Supabase project has already received this migration.
