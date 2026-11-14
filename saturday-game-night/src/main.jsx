@@ -132,6 +132,7 @@ function App() {
   }
 
   function toInputTime(value) {
+    if (value === "TBD Pending...") return "";
     if (!value) return "19:00";
     const match = value.match(/^(\d{1,2}):(\d{2})/);
     if (!match) return "19:00";
@@ -166,7 +167,7 @@ function App() {
   async function join(e) {
     e.preventDefault();
     const clean = nameInput.trim().replace(/\s+/g, " ");
-    if (!clean || !arrivalTime || !db) return;
+    if (!clean || !db) return;
     if (participantPassword.length < 8) { setError("Participant password must be at least 8 characters."); return; }
     setBusy(true); setError(""); setNotice("");
     try {
@@ -184,6 +185,7 @@ function App() {
       const { data: ownProfile, error: ownError } = await db.from("participants").select("*").eq("id", id).maybeSingle();
       if (ownError) throw ownError;
       if (ownProfile) {
+        if (!arrivalTime) throw new Error("Please select your arrival time.");
         const { error: updateError } = await db.from("participants").update({ arrival_time: formatTime(arrivalTime) }).eq("id", id);
         if (updateError) throw updateError;
         setName(ownProfile.name); setParticipantId(id); setParticipantPassword("");
@@ -206,7 +208,7 @@ function App() {
       if (!passwordAccepted) throw new Error("That group password is incorrect. Please try again.");
 
       const { error: insertError } = await db.from("participants").insert({
-        id: current.user.id, name: clean, arrival_time: formatTime(arrivalTime)
+        id: current.user.id, name: clean, arrival_time: "TBD Pending..."
       });
       if (insertError) {
         if (insertError.code === "23505") {
@@ -247,8 +249,6 @@ function App() {
       });
       if (verifyError) throw verifyError;
       if (!linkedId) throw new Error("The participant password is incorrect. Please try again.");
-      const { error: arrivalError } = await db.from("participants").update({ arrival_time: formatTime(arrivalTime) }).eq("id", linkedId);
-      if (arrivalError) throw arrivalError;
       setDuplicateParticipant(null); setParticipantPassword(""); setGroupPassword("");
       setParticipantId(linkedId); setName(duplicateParticipant.name);
       setNotice("Signed in as " + duplicateParticipant.name + ".");
@@ -504,13 +504,12 @@ function App() {
     </section>
 
     {!name ? <section className="join panel">
-      <div className="join-icon"><Users size={21}/></div><div><h2>Who's joining?</h2><p>Enter your name and confirm when you expect to arrive. Your name is locked after registration.</p></div>
+      <div className="join-icon"><Users size={21}/></div><div><h2>Who's joining?</h2><p>Enter your name and create or access your participant account. Your name is locked after registration.</p></div>
       <form className="join-form" onSubmit={e=>{e.preventDefault(); duplicateParticipant ? signInToExistingParticipant() : join(e);}}>
         <label>Your name<input value={nameInput} onChange={e=>setNameInput(e.target.value)} placeholder="Enter your name" maxLength={40} required/></label>
         <label>Participant password<input type="password" value={participantPassword} onChange={e=>setParticipantPassword(e.target.value)} placeholder="Create a password or enter your existing one" autoComplete="new-password" minLength={8} required/><small>Use at least 8 characters. Existing names require that participant’s password.</small></label>
         {!duplicateParticipant && <label>Group password<input type="password" value={groupPassword} onChange={e=>setGroupPassword(e.target.value)} placeholder="Enter the group password" autoComplete="off"/><small>Required only when creating a new participant account.</small></label>}
-        <label>What time can you arrive?<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)} required/><small>Please select your expected arrival time.</small></label>
-        <button className="primary" disabled={busy || !nameInput.trim() || !arrivalTime || participantPassword.length < 8}>{busy ? "Joining…" : duplicateParticipant ? "Continue" : "Join game night"} <span>→</span></button>
+        <button className="primary" disabled={busy || !nameInput.trim() || participantPassword.length < 8}>{busy ? "Joining…" : duplicateParticipant ? "Continue" : "Join game night"} <span>→</span></button>
       </form>
       {duplicateParticipant && <div className="duplicate-prompt"><div><b>This participant already exists</b><p><strong>{duplicateParticipant.name}</strong> is already registered. Enter that participant's password to access the existing account. A new account will not be created.</p></div><div className="duplicate-actions"><button className="primary" disabled={busy || participantPassword.length < 8} onClick={signInToExistingParticipant}>Sign in to existing account</button><button className="secondary" onClick={() => { setDuplicateParticipant(null); setNameInput(""); setParticipantPassword(""); }}>Choose another name</button></div></div>}
     </section> : <>
