@@ -81,6 +81,17 @@ function App() {
   const [games, setGames] = useState([]);
   const [votes, setVotes] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [gameNights, setGameNights] = useState([]);
+  const [selectedEventId, setSelectedEventId] = useState(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [attendance, setAttendance] = useState([]);
+  const [myAttendance, setMyAttendance] = useState("");
+  const [newEventTitle, setNewEventTitle] = useState("Saturday Game Night");
+  const [newEventDate, setNewEventDate] = useState("");
+  const [newEventTime, setNewEventTime] = useState("19:00");
+  const [newEventLocation, setNewEventLocation] = useState("");
+  const [duplicateFromEventId, setDuplicateFromEventId] = useState("");
   const [eventTitleDraft, setEventTitleDraft] = useState("Saturday Game Night");
   const [eventDateDraft, setEventDateDraft] = useState("");
   const [eventTimeDraft, setEventTimeDraft] = useState("19:00");
@@ -140,94 +151,169 @@ function App() {
   useEffect(() => {
     if (!db || !session) return;
     refresh();
-    loadChatMessages();
     const channel = db.channel("game-night-board")
       .on("postgres_changes", { event: "*", schema: "public", table: "games" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "votes" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "participants" }, refresh)
-      .on("postgres_changes", { event: "*", schema: "public", table: "event_settings" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_nights" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "game_rounds" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "game_round_placements" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "participant_link_requests" }, refresh)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "game_chat_messages" }, loadChatMessages)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "game_chat_messages" }, () => loadChatMessages())
+      .on("postgres_changes", { event: "*", schema: "public", table: "game_attendance" }, refresh)
       .subscribe();
     return () => db.removeChannel(channel);
-  }, [session]);
+  }, [session, selectedEventId]);
 
   async function refresh() {
     if (!db || !session) return;
-    const [s, p, g, v, r, rp, requests, current, roleResult, displayRoleResult] = await Promise.all([
-      db.from("event_settings").select("*").eq("id", 1).maybeSingle(),
+    const [eventsResult, p, current, roleResult, displayRoleResult, requests] = await Promise.all([
+      db.from("game_nights").select("*").order("event_date", { ascending: true }),
       db.from("participants").select("*").order("created_at"),
-      db.from("games").select("*").order("created_at", { ascending: false }),
-      db.from("votes").select("*"),
-      db.from("game_rounds").select("*").order("round_number"),
-      db.from("game_round_placements").select("*").order("place"),
-      db.from("participant_link_requests").select("*").order("requested_at", { ascending: false }),
       db.rpc("get_my_participant_id"),
       isAdmin ? db.rpc("admin_list_participant_roles") : Promise.resolve({ data: null, error: null }),
-      db.rpc("list_participant_display_roles")
+      db.rpc("list_participant_display_roles"),
+      db.from("participant_link_requests").select("*").order("requested_at", { ascending: false })
     ]);
-    const issue = [s, p, g, v, r, rp, requests, current, roleResult, displayRoleResult].find(x => x.error);
-    if (issue) setError(issue.error.message);
-    if (s.data) {
-      setSettings(s.data);
-      setEventTitleDraft(s.data.event_title || "Saturday Game Night");
-      setEventDateDraft(s.data.event_date || "");
-      setEventTimeDraft(toInputEventTime(s.data.event_time));
-      setEventLocationDraft(s.data.location || "");
+    const issue = [eventsResult,p,current,roleResult,displayRoleResult,requests].find(x=>x.error);
+    if (issue) { setError(issue.error.message); setLoading(false); return; }
+    const events = eventsResult.data || [];
+    setGameNights(events);
+    let activeId = selectedEventId;
+    if (!activeId || !events.some(event=>event.id===activeId)) {
+      const today = new Date().toLocaleDateString("en-CA");
+      const upcoming = events.filter(event=>!event.is_archived && event.event_date>=today).sort((a,b)=>a.event_date.localeCompare(b.event_date))[0];
+      const fallback = events.filter(event=>!event.is_archived).sort((a,b)=>b.event_date.localeCompare(a.event_date))[0] || events[0];
+      activeId = (upcoming || fallback)?.id || null;
+      if (activeId !== selectedEventId) setSelectedEventId(activeId);
     }
     if (p.data) setParticipants(p.data);
     if (roleResult?.data) setParticipantRoles(roleResult.data);
     if (displayRoleResult?.data) setDisplayRoles(displayRoleResult.data);
-    if (g.data) setGames(g.data);
-    if (v.data) setVotes(v.data);
-    if (r.data) setRounds(r.data);
-    if (rp.data) setPlacements(rp.data);
     if (requests.data) {
       setLinkRequests(requests.data);
-      setPendingLink(requests.data.some(x => x.requester_id === session.user.id && x.status === "pending"));
+      setPendingLink(requests.data.some(x=>x.requester_id===session.user.id&&x.status==="pending"));
     }
     if (current.data) {
       setParticipantId(current.data);
-      const me = p.data?.find(x => x.id === current.data);
-      if (me) {
-        setName(me.name);
-        setNameInput(me.name);
-        setParticipantNameDraft(me.name);
-        setParticipantSloganDraft(me.slogan || "");
-        setArrivalTime(toInputTime(me.arrival_time));
-      } else {
-        setName("");
-      }
+      const me=p.data?.find(x=>x.id===current.data);
+      if(me){setName(me.name);setNameInput(me.name);setParticipantNameDraft(me.name);setParticipantSloganDraft(me.slogan||"");setArrivalTime(toInputTime(me.arrival_time));}
+      else setName("");
     }
+    if (!activeId) {
+      setSettings(null);setGames([]);setVotes([]);setRounds([]);setPlacements([]);setAttendance([]);setChatMessages([]);setLoading(false);return;
+    }
+    const [eventResult,gamesResult,attendanceResult] = await Promise.all([
+      db.from("game_nights").select("*").eq("id",activeId).maybeSingle(),
+      db.from("games").select("*").eq("event_id",activeId).order("created_at",{ascending:false}),
+      db.from("game_attendance").select("*").eq("event_id",activeId)
+    ]);
+    const issue2=[eventResult,gamesResult,attendanceResult].find(x=>x.error);
+    if(issue2) setError(issue2.error.message);
+    const eventGames=gamesResult.data||[], gameIds=eventGames.map(g=>g.id);
+    const [votesResult,roundsResult] = gameIds.length ? await Promise.all([
+      db.from("votes").select("*").in("game_id",gameIds),
+      db.from("game_rounds").select("*").in("game_id",gameIds).order("round_number")
+    ]) : [{data:[],error:null},{data:[],error:null}];
+    const roundIds=(roundsResult.data||[]).map(r=>r.id);
+    const placementsResult=roundIds.length ? await db.from("game_round_placements").select("*").in("round_id",roundIds).order("place") : {data:[],error:null};
+    const issue3=[votesResult,roundsResult,placementsResult].find(x=>x.error);
+    if(issue3) setError(issue3.error.message);
+    if(eventResult.data){
+      setSettings(eventResult.data);
+      setEventTitleDraft(eventResult.data.event_title||"Saturday Game Night");
+      setEventDateDraft(eventResult.data.event_date||"");
+      setEventTimeDraft(toInputEventTime(eventResult.data.event_time));
+      setEventLocationDraft(eventResult.data.location||"");
+      setCalendarMonth(new Date(Number(eventResult.data.event_date.slice(0,4)),Number(eventResult.data.event_date.slice(5,7))-1,1));
+    }
+    setGames(eventGames);setVotes(votesResult.data||[]);setRounds(roundsResult.data||[]);setPlacements(placementsResult.data||[]);
+    setAttendance(attendanceResult.data||[]);
+    setMyAttendance((attendanceResult.data||[]).find(x=>x.participant_id===current.data)?.status||"");
+    await loadChatMessages(activeId);
     setLoading(false);
   }
 
-  async function loadChatMessages() {
-    if (!db || !session) return;
-    const { data, error: chatError } = await db.from("game_chat_messages").select("*").order("created_at", { ascending: false }).limit(100);
-    if (chatError) setError(chatError.message);
-    else setChatMessages((data || []).reverse());
+  async function loadChatMessages(eventId=selectedEventId) {
+    if(!db||!session||!eventId) return;
+    const {data,error:chatError}=await db.from("game_chat_messages").select("*").eq("event_id",eventId).order("created_at",{ascending:false}).limit(100);
+    if(chatError) setError(chatError.message); else setChatMessages((data||[]).reverse());
   }
 
   async function sendChatMessage(e) {
     e.preventDefault();
-    const message = chatDraft.trim();
-    if (!message || !participantId || !name) return;
-    if (message.length > 1000) { setError("Messages must be 1,000 characters or fewer."); return; }
-    setBusy(true); setError(""); setNotice("");
-    try {
-      const { error: sendError } = await db.from("game_chat_messages").insert({ participant_id: participantId, sender_name: name, message });
-      if (sendError) throw sendError;
-      setChatDraft("");
-      await loadChatMessages();
-    } catch (err) {
-      setError(err.message || "Unable to send your message.");
-    } finally {
-      setBusy(false);
-    }
+    const message=chatDraft.trim();
+    if(!message||!participantId||!name||!selectedEventId) return;
+    if(settings?.is_archived){setError("This Game Night is archived and its chat is read-only.");return;}
+    if(message.length>1000){setError("Messages must be 1,000 characters or fewer.");return;}
+    setBusy(true);setError("");setNotice("");
+    try{
+      const {error:sendError}=await db.from("game_chat_messages").insert({event_id:selectedEventId,participant_id:participantId,sender_name:name,message});
+      if(sendError) throw sendError;
+      setChatDraft("");await loadChatMessages(selectedEventId);
+    }catch(err){setError(err.message||"Unable to send your message.");}
+    finally{setBusy(false);}
   }
+
+  async function setEventAttendance(status) {
+    if(!participantId||!selectedEventId||settings?.is_archived) return;
+    const {error:e}=await db.from("game_attendance").upsert({event_id:selectedEventId,participant_id:participantId,status},{onConflict:"event_id,participant_id"});
+    if(e) setError(e.message); else {setMyAttendance(status);await refresh();}
+  }
+
+  function selectGameNight(eventId) {
+    setSelectedEventId(eventId);setCalendarOpen(false);setChatExpanded(false);setScoreboardMode(false);setError("");setNotice("");
+    const chosen=gameNights.find(event=>event.id===eventId);
+    if(chosen) setCalendarMonth(new Date(Number(chosen.event_date.slice(0,4)),Number(chosen.event_date.slice(5,7))-1,1));
+  }
+
+  async function createGameNight() {
+    if(!isAdmin||!newEventDate||!newEventTime) return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const {data,error:e}=await db.from("game_nights").insert({event_title:newEventTitle.trim()||"Saturday Game Night",event_date:newEventDate,event_time:formatTime(newEventTime),location:newEventLocation.trim()||null,created_by:session.user.id}).select("*").single();
+      if(e) throw e;
+      setNewEventTitle("Saturday Game Night");setNewEventDate("");setNewEventTime("19:00");setNewEventLocation("");
+      setSelectedEventId(data.id);setNotice("New Game Night created.");await refresh();
+    }catch(err){setError(err.message||"Unable to create Game Night. Check whether another event already uses that date.");}
+    finally{setBusy(false);}
+  }
+
+  async function duplicateGameNight() {
+    if(!isAdmin||!newEventDate||!newEventTime||!duplicateFromEventId) return;
+    setBusy(true);setError("");setNotice("");
+    try{
+      const {data:event,error:eventError}=await db.from("game_nights").insert({event_title:newEventTitle.trim()||"Saturday Game Night",event_date:newEventDate,event_time:formatTime(newEventTime),location:newEventLocation.trim()||null,created_by:session.user.id}).select("*").single();
+      if(eventError) throw eventError;
+      const source=await db.from("games").select("*").eq("event_id",duplicateFromEventId);
+      if(source.error) throw source.error;
+      for(const game of source.data||[]){
+        const {data:newGame,error:gameError}=await db.from("games").insert({event_id:event.id,title:game.title,description:game.description,suggested_by:game.suggested_by}).select("id").single();
+        if(gameError) throw gameError;
+        const oldRounds=await db.from("game_rounds").select("*").eq("game_id",game.id).order("round_number");
+        if(oldRounds.error) throw oldRounds.error;
+        for(const round of oldRounds.data||[]){
+          const {error:roundError}=await db.from("game_rounds").insert({game_id:newGame.id,round_number:round.round_number,notes:round.notes,created_by:session.user.id});
+          if(roundError) throw roundError;
+        }
+      }
+      setSelectedEventId(event.id);setNotice("New Game Night created with the previous game setup. Scores, votes, chat, and attendance were not copied.");await refresh();
+    }catch(err){setError(err.message||"Unable to duplicate Game Night.");}
+    finally{setBusy(false);}
+  }
+
+  async function archiveGameNight(event) {
+    if(!isAdmin) return;
+    if(!window.confirm((event.is_archived?"Reopen ":"Archive ")+event.event_title+"?")) return;
+    const {error:e}=await db.from("game_nights").update({is_archived:!event.is_archived}).eq("id",event.id);
+    if(e) setError(e.message); else {setNotice(event.is_archived?"Game Night reopened.":"Game Night archived and made read-only.");await refresh();}
+  }
+
+  const calendarDays=(()=>{
+    const year=calendarMonth.getFullYear(),month=calendarMonth.getMonth();
+    const first=new Date(year,month,1),count=new Date(year,month+1,0).getDate(),offset=(first.getDay()+6)%7;
+    return [...Array(offset).fill(null),...Array.from({length:count},(_,i)=>i+1)];
+  })();
 
   function formatChatTimestamp(value) {
     return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
