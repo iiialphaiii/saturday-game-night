@@ -24,6 +24,7 @@ function App() {
   const [games, setGames] = useState([]);
   const [votes, setVotes] = useState([]);
   const [settings, setSettings] = useState(null);
+  const [eventTitleDraft, setEventTitleDraft] = useState("Saturday Game Night");
   const [eventDateDraft, setEventDateDraft] = useState("");
   const [eventTimeDraft, setEventTimeDraft] = useState("19:00");
   const [eventLocationDraft, setEventLocationDraft] = useState("");
@@ -112,6 +113,7 @@ function App() {
     if (issue) setError(issue.error.message);
     if (s.data) {
       setSettings(s.data);
+      setEventTitleDraft(s.data.event_title || "Saturday Game Night");
       setEventDateDraft(s.data.event_date || "");
       setEventTimeDraft(toInputEventTime(s.data.event_time));
       setEventLocationDraft(s.data.location || "");
@@ -413,13 +415,14 @@ function App() {
     }
     setBusy(true); setError(""); setNotice("");
     const { error: e } = await db.from("event_settings").update({
+      event_title: eventTitleDraft.trim() || "Saturday Game Night",
       event_date: eventDateDraft,
       event_time: formatTime(eventTimeDraft),
       location: eventLocationDraft.trim() || null
     }).eq("id", 1);
     if (e) setError(e.message);
     else {
-      setNotice("Game night date, time, and location updated.");
+      setNotice("Game night title, date, time, and location updated.");
       await refresh();
     }
     setBusy(false);
@@ -594,7 +597,7 @@ function App() {
   return <main className="shell">
     <header className="topbar"><a className="brand" href="#"><span className="brand-icon"><Gamepad2 size={21}/></span> GAME NIGHT</a><div className="top-actions">{name && <button className={"admin-mode-toggle account-mode-toggle "+(accountMode?"active":"")} onClick={()=>{setAccountMode(v=>!v);setError("");setNotice("");}}><Settings size={14}/>{accountMode?"Back to game night":"Account"}</button>}{isAdmin && <button className={"admin-mode-toggle "+(adminMode?"active":"")} onClick={()=>setAdminMode(v=>!v)}><Shield size={14}/>{adminMode?"Switch to normal mode":"Switch to admin mode"}</button>}{isGameAdmin && <button className={"admin-mode-toggle scoreboard-mode-toggle "+(scoreboardMode?"active":"")} onClick={()=>{setScoreboardMode(v=>!v);setError("");setNotice("");}}><Trophy size={14}/>{scoreboardMode?"Done editing scoreboard":"Edit scoreboard"}</button>}{name && <button className="quiet" onClick={switchName}><LogOut size={15}/> Logout</button>}</div></header>
     <section className="hero">
-      <div className="hero-copy"><div className="eyebrow"><Sparkles size={14}/> LET'S PICK THE NEXT GAME</div><h1>Saturday<br/><em>Game Night.</em></h1><p>Bring your best ideas. Vote for the games you want to play.</p><div className="event-meta"><span><CalendarDays size={16}/> {displayEventDate(settings?.event_date)}</span><span><Clock3 size={16}/> {settings?.event_time || "7:00 PM"}</span>{settings?.location && <span><MapPin size={16}/> {settings.location}</span>}</div></div>
+      <div className="hero-copy"><div className="eyebrow"><Sparkles size={14}/> LET'S PICK THE NEXT GAME</div><h1>{(settings?.event_title || "Saturday Game Night").replace(/\s+/, " ").split(" ").slice(0, -1).join(" ") || "Saturday"}<br/><em>{(settings?.event_title || "Saturday Game Night").split(" ").slice(-1)[0]}.</em></h1><p>Bring your best ideas. Vote for the games you want to play.</p><div className="event-meta"><span><CalendarDays size={16}/> {displayEventDate(settings?.event_date)}</span><span><Clock3 size={16}/> {settings?.event_time || "7:00 PM"}</span>{settings?.location && <span><MapPin size={16}/> {settings.location}</span>}</div></div>
       <div className="hero-graphic"><div className="halo"/><Gamepad2 size={178} strokeWidth={1.1}/><b>✦</b></div>
     </section>
 
@@ -656,7 +659,7 @@ function App() {
       </section>
 
       {showAdminControls && <section className="panel admin-panel"><div className="panel-title"><div><small>ADMINISTRATION</small><h2>Admin controls</h2></div><span className="tile"><Shield/></span></div>
-        <div className="admin-section"><h3><CalendarDays size={16}/> Game night details</h3><p className="muted">Set the date, start time, and location shown to everyone on the game night board.</p><div className="event-details-form"><label>Game night date<input type="date" value={eventDateDraft} onChange={e=>setEventDateDraft(e.target.value)} required/></label><label>Start time<input type="time" value={eventTimeDraft} onChange={e=>setEventTimeDraft(e.target.value)} required/></label><label className="event-location-field">Location<input value={eventLocationDraft} onChange={e=>setEventLocationDraft(e.target.value)} placeholder="Enter address, venue, or meeting place" maxLength={240}/></label><button className="primary" onClick={saveEventDetails} disabled={busy || !eventDateDraft || !eventTimeDraft}>Save game night details</button></div></div>
+        <div className="admin-section"><h3><CalendarDays size={16}/> Game night details</h3><p className="muted">Set the title, date, start time, and location shown to everyone on the game night board.</p><div className="event-details-form"><label>Game night title<input value={eventTitleDraft} onChange={e=>setEventTitleDraft(e.target.value)} placeholder="Enter game night title" maxLength={80} required/></label><label>Game night date<input type="date" value={eventDateDraft} onChange={e=>setEventDateDraft(e.target.value)} required/></label><label>Start time<input type="time" value={eventTimeDraft} onChange={e=>setEventTimeDraft(e.target.value)} required/></label><label className="event-location-field">Location<input value={eventLocationDraft} onChange={e=>setEventLocationDraft(e.target.value)} placeholder="Enter address, venue, or meeting place" maxLength={240}/></label><button className="primary" onClick={saveEventDetails} disabled={busy || !eventDateDraft || !eventTimeDraft}>Save game night details</button></div></div>
         <div className="admin-section"><h3><Shield size={16}/> Group password</h3><p className="muted">Set or replace the password required for new participant accounts. Existing participants stay signed in.</p><div className="admin-password-form"><input type="password" value={adminGroupPassword} onChange={e=>setAdminGroupPassword(e.target.value)} placeholder="New group password (6+ characters)" minLength={6} maxLength={200} autoComplete="new-password"/><button className="primary" disabled={adminGroupPassword.trim().length < 6} onClick={saveGroupPassword}>Save group password</button></div></div>
         <div className="admin-setting"><div><b>Voting status</b><p>{settings?.voting_open ? "Participants can currently vote." : "Voting is closed for everyone."}</p></div><button className="primary" onClick={toggleVoting}>{settings?.voting_open ? "Close voting" : "Open voting"}</button></div>
         <div className="admin-section"><h3><Shield size={16}/> Administrator access</h3><p className="muted">Promote trusted participants to admins. Admins can manage the board and other admin accounts. The last admin cannot be removed.</p>
