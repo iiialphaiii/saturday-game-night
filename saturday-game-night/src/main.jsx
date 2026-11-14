@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
-import { Gamepad2, Plus, ThumbsUp, Users, Trophy, CalendarDays, Clock3, RefreshCw, LogOut, Check, Sparkles, Info, Shield, Settings, Trash2, Pencil, MapPin, ChevronDown, ChevronUp, Medal, UserCheck, UserX } from "lucide-react";
+import { Gamepad2, Plus, ThumbsUp, ThumbsDown, Users, Trophy, CalendarDays, Clock3, RefreshCw, LogOut, Check, Sparkles, Info, Shield, Settings, Trash2, Pencil, MapPin, ChevronDown, ChevronUp, Medal, UserCheck, UserX } from "lucide-react";
 import "./styles.css";
 import { APP_VERSION } from "./version.js";
 
@@ -131,7 +131,7 @@ function App() {
   const showAdminControls = isAdmin && adminMode;
   const canManageScoreboard = showAdminControls || scoreboardMode;
   const canManageAttendance = showAdminControls || scoreboardMode;
-  const canViewVoteDetails = showAdminControls || (isGameAdmin && scoreboardMode);
+  const canViewVoteDetails = isAdmin || isGameAdmin;
 
   useEffect(() => {
     if (!db) { setLoading(false); return; }
@@ -585,13 +585,18 @@ function App() {
     setBusy(false);
   }
 
-  async function vote(gameId) {
-    if (!settings?.voting_open || !participantId || settings?.is_archived) return;
+  async function vote(gameId, voteType) {
+    if (!settings?.voting_open || !participantId || settings?.is_archived || !["up", "down"].includes(voteType)) return;
     const existing = votes.find(v => v.game_id === gameId && v.participant_id === participantId);
     setBusy(true);
-    const result = existing
-      ? await db.from("votes").delete().eq("id", existing.id)
-      : await db.from("votes").insert({ game_id: gameId, participant_id: participantId });
+    let result;
+    if (existing?.vote_type === voteType) {
+      result = await db.from("votes").delete().eq("id", existing.id);
+    } else if (existing) {
+      result = await db.from("votes").update({ vote_type: voteType }).eq("id", existing.id);
+    } else {
+      result = await db.from("votes").insert({ game_id: gameId, participant_id: participantId, vote_type: voteType });
+    }
     if (result.error) setError(result.error.message);
     await refresh();
     setBusy(false);
@@ -910,10 +915,12 @@ function App() {
 
   const ranked = useMemo(() => games.map(g => ({
     ...g,
-    count: Number(voteCounts.find(v => v.game_id === g.id)?.vote_count ?? 0),
-    mine: voteCounts.some(v => v.game_id === g.id && v.has_voted)
-  })).sort((a, b) => b.count - a.count || a.title.localeCompare(b.title)), [games, votes, voteCounts, participantId]);
-  const max = Math.max(1, ...ranked.map(g => g.count));
+    upCount: Number(voteCounts.find(v => v.game_id === g.id)?.up_count ?? 0),
+    downCount: Number(voteCounts.find(v => v.game_id === g.id)?.down_count ?? 0),
+    myVote: voteCounts.find(v => v.game_id === g.id)?.my_vote ?? null
+  })).sort((a, b) => b.upCount - a.upCount || a.title.localeCompare(b.title)), [games, votes, voteCounts, participantId]);
+  const totalVoteCount = voteCounts.reduce((sum, v) => sum + Number(v.up_count || 0) + Number(v.down_count || 0), 0);
+  const max = Math.max(1, ...ranked.map(g => g.upCount));
   const pendingRequests = linkRequests.filter(r => r.status === "pending");
   const goingCount = attendance.filter(x => x.status === "going").length;
   const maybeCount = attendance.filter(x => x.status === "maybe").length;
@@ -951,7 +958,7 @@ function App() {
       <div className="welcome"><div><small>YOU'RE IN</small><h2>Hey, {name} ✌️</h2></div><span className="live"><i/> LIVE BOARD</span></div><section className="panel attendance-panel"><div className="panel-title"><div><small>THIS GAME NIGHT</small><h2>Attendance</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Let everyone know whether you are joining this date.</p><div className="attendance-actions">{[["going","Going"],["maybe","Maybe"],["not_going","Not Going"]].map(([value,label]) => <button key={value} className={"secondary"+(myAttendance===value?" selected":"")} disabled={busy||settings?.is_archived} onClick={() => setEventAttendance(value)}>{myAttendance===value?"✓ ":""}{label}</button>)}</div>{(myAttendance==="going"||myAttendance==="maybe") && <form className="arrival-update" onSubmit={join}><label>Update your arrival time<ArrivalTimePicker value={arrivalTime} onChange={setArrivalTime}/><small>{arrivalTime ? "Current saved time: " + formatTime(arrivalTime) : "Please select a time."}</small></label><button className="secondary" disabled={busy||settings?.is_archived}>Save arrival time</button></form>}<div className="attendance-summary"><span><b>{goingCount}</b> Going</span><span><b>{maybeCount}</b> Maybe</span><span><b>{notGoingCount}</b> Not Going</span></div><div className="attendance-list">{attendance.map(item => <span key={item.id}>{participants.find(p=>p.id===item.participant_id)?.name||"Participant"} · {item.status==="not_going"?"Not Going":item.status[0].toUpperCase()+item.status.slice(1)}</span>)}</div>{canManageAttendance && <div className="admin-section attendance-admin-section"><h3><Shield size={16}/> Manage participant attendance</h3><p className="muted">Administrators and Game Admins can update each participant’s RSVP and arrival time for this Game Night.</p>{participants.filter(person=>person.is_active!==false).map(person=>{const savedStatus=attendance.find(row=>row.participant_id===person.id)?.status||"";const savedArrival=eventArrivals.find(row=>row.participant_id===person.id)?.arrival_time;const draft=attendanceDrafts[person.id]||{};const status=draft.status??savedStatus;const time=draft.arrivalTime??toInputTime(savedArrival);return <div className="request-row attendance-admin-row" key={person.id}><div className="attendance-admin-person"><b>{person.name}</b><select aria-label={"Attendance status for "+person.name} value={status} onChange={e=>setAttendanceDrafts(v=>({...v,[person.id]:{...v[person.id],status:e.target.value}}))}><option value="">No response</option><option value="going">Going</option><option value="maybe">Maybe</option><option value="not_going">Not Going</option></select>{(status==="going"||status==="maybe")&&<ArrivalTimePicker value={time} onChange={value=>setAttendanceDrafts(v=>({...v,[person.id]:{...v[person.id],arrivalTime:value}}))}/>}</div><button className="secondary" disabled={busy||settings?.is_archived||!status||((status==="going"||status==="maybe")&&!time)} onClick={()=>saveParticipantAttendance(person)}>Save</button></div>;})}</div>}</section>
       <section className="stats">
         <div className="stat"><Gamepad2/><strong>{games.length}</strong><span>Games suggested</span></div>
-        <div className="stat"><ThumbsUp/><strong>{votes.length}</strong><span>Total votes</span></div>
+        <div className="stat"><ThumbsUp/><strong>{totalVoteCount}</strong><span>Total votes</span></div>
         <div className="stat"><Users/><strong>{goingParticipants.length}</strong><span>People joining</span></div>
       </section>
       <div className="columns">
@@ -961,7 +968,7 @@ function App() {
         </section>
         <section className="panel voting"><div className="panel-title"><div><small>THE COMMUNITY PICKS</small><h2>Vote for games</h2></div><span className="tile gold"><Trophy/></span></div><p className="instruction"><i/> Vote for every game you'd like to play.</p>
           {!settings?.voting_open && <div className="closed">Voting is currently closed.</div>}
-          {!ranked.length ? <div className="empty"><Gamepad2 size={28}/><b>No games yet</b><span>Be the first to suggest one!</span></div> : <div className="game-list">{ranked.map((g,i)=><article className="game" key={g.id}><div className="rank">{i===0 && g.count ? <Trophy size={16}/> : String(i+1).padStart(2,"0")}</div><div className="game-info"><div className="game-heading"><b>{g.title}</b>{i===0 && g.count>0 && <small>LEADING</small>}</div>{g.description && <p>{g.description}</p>}<div className="byline">Suggested by {participants.find(p=>p.id===g.suggested_by)?.name || "a participant"}</div><div className="bar"><span style={{width:(g.count/max*100)+"%"}}/></div>{canViewVoteDetails && <div className="vote-audit"><b>Voted by</b><span>{g.count ? votes.filter(v=>v.game_id===g.id).map(v=>participants.find(p=>p.id===v.participant_id)?.name || "Unknown participant").sort((a,b)=>a.localeCompare(b)).join(", ") : "No votes yet"}</span></div>}</div><div className="game-actions">{showAdminControls && !settings?.is_archived && <button className="icon-action" title="Edit game" onClick={()=>updateGame(g)}><Pencil size={14}/></button>}{showAdminControls && !settings?.is_archived && <button className="icon-action danger" title="Delete game" onClick={()=>deleteGame(g)}><Trash2 size={14}/></button>}<button className={"vote "+(g.mine?"selected":"")} onClick={()=>vote(g.id)} disabled={busy || !settings?.voting_open || settings?.is_archived}>{g.mine?<Check size={16}/>:<ThumbsUp size={16}/>}<b>{g.count}</b></button></div></article>)}</div>}
+          {!ranked.length ? <div className="empty"><Gamepad2 size={28}/><b>No games yet</b><span>Be the first to suggest one!</span></div> : <div className="game-list">{ranked.map((g,i)=><article className="game" key={g.id}><div className="rank">{i===0 && g.upCount ? <Trophy size={16}/> : String(i+1).padStart(2,"0")}</div><div className="game-info"><div className="game-heading"><b>{g.title}</b>{i===0 && g.upCount>0 && <small>LEADING</small>}</div>{g.description && <p>{g.description}</p>}<div className="byline">Suggested by {participants.find(p=>p.id===g.suggested_by)?.name || "a participant"}</div><div className="bar"><span style={{width:(g.upCount/max*100)+"%"}}/></div>{canViewVoteDetails && <div className="vote-audit"><div><b><ThumbsUp size={12}/> Thumbs up ({g.upCount})</b><span>{g.upCount ? votes.filter(v=>v.game_id===g.id && v.vote_type==="up").map(v=>participants.find(p=>p.id===v.participant_id)?.name || "Unknown participant").sort((a,b)=>a.localeCompare(b)).join(", ") : "No votes yet"}</span></div><div><b><ThumbsDown size={12}/> Thumbs down ({g.downCount})</b><span>{g.downCount ? votes.filter(v=>v.game_id===g.id && v.vote_type==="down").map(v=>participants.find(p=>p.id===v.participant_id)?.name || "Unknown participant").sort((a,b)=>a.localeCompare(b)).join(", ") : "No votes yet"}</span></div></div>}</div><div className="game-actions">{showAdminControls && !settings?.is_archived && <button className="icon-action" title="Edit game" onClick={()=>updateGame(g)}><Pencil size={14}/></button>}{showAdminControls && !settings?.is_archived && <button className="icon-action danger" title="Delete game" onClick={()=>deleteGame(g)}><Trash2 size={14}/></button>}<button className={"vote vote-up "+(g.myVote==="up"?"selected":"")} title="Vote thumbs up" aria-label={"Vote thumbs up for "+g.title} onClick={()=>vote(g.id,"up")} disabled={busy || !settings?.voting_open || settings?.is_archived}><ThumbsUp size={16}/><b>{g.upCount}</b></button><button className={"vote vote-down "+(g.myVote==="down"?"selected":"")} title="Vote thumbs down" aria-label={"Vote thumbs down for "+g.title} onClick={()=>vote(g.id,"down")} disabled={busy || !settings?.voting_open || settings?.is_archived}><ThumbsDown size={16}/><b>{g.downCount}</b></button></div></article>)}</div>}
           <div className="footnote">You can change your vote anytime while voting is open.</div>
         </section>
       </div>
