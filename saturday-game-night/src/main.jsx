@@ -230,7 +230,7 @@ function App() {
 
   async function switchName() {
     await db.auth.signOut();
-    setName(""); setNameInput(""); setParticipantId(null); setDuplicateParticipant(null); setPendingLink(false);
+    setName(""); setNameInput(""); setParticipantId(null); setDuplicateParticipant(null); setPendingLink(false); setGroupPassword("");
     setArrivalTime("19:00");
   }
 
@@ -349,9 +349,9 @@ function App() {
       <div className="join-icon"><Users size={21}/></div><div><h2>{pendingLink ? "Request pending" : "Who's joining?"}</h2><p>{pendingLink ? "An admin needs to approve your request to use an existing participant profile. You can keep this page open; it will update after approval." : "Enter your name and confirm when you expect to arrive. Your name is locked after registration."}</p></div>
       {!pendingLink && <form className="join-form" onSubmit={join}>
         <label>Your name<input value={nameInput} onChange={e=>setNameInput(e.target.value)} placeholder="Enter your name" maxLength={40} required/></label>
-        <label>Group password<input type="password" value={groupPassword} onChange={e=>setGroupPassword(e.target.value)} placeholder="Enter the group password" autoComplete="off" required/><small>Ask an organizer for the current group password.</small></label>
+        <label>Group password<input type="password" value={groupPassword} onChange={e=>setGroupPassword(e.target.value)} placeholder="Enter the group password" autoComplete="off" required={!participantId}/><small>Required for new participants. Ask an organizer for the current group password.</small></label>
         <label>What time can you arrive?<input type="time" value={arrivalTime} onChange={e=>setArrivalTime(e.target.value)} required/><small>Please select your expected arrival time.</small></label>
-        <button className="primary" disabled={busy || !nameInput.trim() || !arrivalTime || !groupPassword}>{busy ? "Joining…" : "Join game night"} <span>→</span></button>
+        <button className="primary" disabled={busy || !nameInput.trim() || !arrivalTime || (!participantId && !groupPassword)}>{busy ? "Joining…" : "Join game night"} <span>→</span></button>
       </form>}
       {duplicateParticipant && <div className="duplicate-prompt"><div><b>This name already exists</b><p>{duplicateParticipant.is_active === false ? <>A participant named <strong>{duplicateParticipant.name}</strong> already exists but is currently inactive. Ask an admin to restore that participant. You cannot create a duplicate.</> : <>A participant named <strong>{duplicateParticipant.name}</strong> is already registered. Would you like to request to use this existing participant instead? An admin must approve the link to protect the existing account.</>}</p></div><div className="duplicate-actions">{duplicateParticipant.is_active !== false && <button className="primary" disabled={busy} onClick={() => createLinkRequest(duplicateParticipant)}>Request existing participant</button>}<button className="secondary" onClick={() => { setDuplicateParticipant(null); setNameInput(""); }}>Choose another name</button></div></div>}
       {pendingLink && <button className="secondary pending-cancel" onClick={switchName}>Cancel and switch session</button>}
