@@ -605,6 +605,7 @@ function App() {
   }
 
   async function toggleScoreboardEditing() {
+    if (settings?.is_archived) { setError("Archived Game Nights are view-only."); return; }
     if (scoreboardMode) {
       setScoreboardMode(false);
       setNotice("Scoreboard editing is off.");
