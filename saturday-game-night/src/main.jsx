@@ -676,7 +676,7 @@ function App() {
     </>}
     {session && participantId && !accountMode && <section className="panel game-chat-panel"><div className="panel-title"><div><small>THE GROUP CHAT</small><h2>Game Night Chat</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Send a message to everyone in the group.</p><div className="chat-message-list" aria-live="polite">{chatMessages.length ? chatMessages.map(msg=><article className={"chat-message"+(msg.participant_id===participantId?" own":"")} key={msg.id}><div className="chat-message-meta"><b>{msg.sender_name}</b><time dateTime={msg.created_at}>{formatChatTimestamp(msg.created_at)}</time></div><p>{msg.message}</p></article>) : <p className="chat-empty">No messages yet. Start the conversation!</p>}</div><form className="chat-compose" onSubmit={sendChatMessage}><textarea value={chatDraft} onChange={e=>setChatDraft(e.target.value)} maxLength={1000} rows={2} placeholder="Write a message..." aria-label="Chat message" required/><button className="primary" disabled={busy || !chatDraft.trim()}>Send message</button></form></section>}
     {(error||notice)&&<div className={"toast "+(error?"bad":"")}>{error||notice}<button onClick={()=>{setError("");setNotice("");}}>×</button></div>}
-    <footer><span>MADE FOR GOOD COMPANY.</span><button onClick={refresh}><RefreshCw size={13}/> Refresh board</button></footer>
+    <footer><span>MADE BY PETER TRAN.</span><button onClick={refresh}><RefreshCw size={13}/> Refresh board</button></footer>
   </main>;
 }
 
