@@ -68,3 +68,8 @@
 
 /* The built-in admin account has a permanent, non-editable role. */
 .role-locked,.request-actions button.role-locked:disabled{opacity:.48;cursor:not-allowed;filter:grayscale(1);border-color:#555969;color:#a2a5b1;background:#252833;box-shadow:none}
+
+
+/* Game Admin participant check-in controls and crew timestamp */
+.attendance-admin-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.check-in-button{display:flex;align-items:center;gap:5px;min-height:32px;padding:0 10px;font-size:10px;white-space:nowrap}.check-in-label{display:inline-flex;align-items:center;gap:4px;color:#9fd8b4}.check-in-label svg{vertical-align:middle}
+@media(max-width:600px){.attendance-admin-actions{width:100%}.attendance-admin-actions button{flex:1}}
