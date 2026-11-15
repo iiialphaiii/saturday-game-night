@@ -64,3 +64,7 @@
 .game-score{display:inline-flex;align-items:center;justify-content:center;min-width:34px;color:#f3efff;font-size:25px;line-height:1;font-weight:800;font-variant-numeric:tabular-nums}
 .vote-caption{margin-top:4px;color:#9298aa;font-size:10px;line-height:1.4}
 .vote-caption::first-letter{color:#c5b6ff}
+
+
+/* The built-in admin account has a permanent, non-editable role. */
+.role-locked,.request-actions button.role-locked:disabled{opacity:.48;cursor:not-allowed;filter:grayscale(1);border-color:#555969;color:#a2a5b1;background:#252833;box-shadow:none}
