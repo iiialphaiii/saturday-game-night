@@ -106,3 +106,28 @@ end
 from private.participant_aliases a
 join participant_roles r on r.participant_id = a.participant_id
 where u.id = a.auth_user_id;
+
+-- Ensure the canonical participant Auth identity is also synchronized when a
+-- legacy participant had its role stored only on a previously linked login.
+with participant_roles as (
+  select p.id as participant_id,
+    coalesce(
+      (select u.raw_app_meta_data->>'role' from auth.users u where u.id = p.id),
+      (select case
+        when bool_or(u.raw_app_meta_data->>'role' = 'admin') then 'admin'
+        when bool_or(u.raw_app_meta_data->>'role' = 'game_admin') then 'game_admin'
+        else null end
+       from private.participant_aliases a
+       join auth.users u on u.id = a.auth_user_id
+       where a.participant_id = p.id)
+    ) as role
+  from public.participants p
+)
+update auth.users u
+set raw_app_meta_data = case
+  when r.role in ('admin', 'game_admin')
+    then coalesce(u.raw_app_meta_data, '{}'::jsonb) || jsonb_build_object('role', r.role)
+  else coalesce(u.raw_app_meta_data, '{}'::jsonb) - 'role'
+end
+from participant_roles r
+where u.id = r.participant_id;
