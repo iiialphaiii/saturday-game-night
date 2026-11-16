@@ -44,7 +44,7 @@ const ITEM_CATALOG = [
 ].map((item, index) => ({...item, id:"hq-item-"+index}));
 
 const HERO_TYPES = ["Barbarian","Dwarf","Elf","Wizard","Warlock","Bard","Druid","Monk","Rogue","Other"];
-const CATEGORIES = ["All","Weapon","Armor","Tool","Artifact","Artifact / Scroll","Artifact / Relic","Treasure / Potion","Potion","Equipment / Potion","Weapon / Potion","Equipment"];
+const CATEGORIES = ["All","Weapon","Armor","Tool","Artifact","Artifact / Scroll","Artifact / Relic","Treasure","Treasure / Potion","Potion","Equipment / Potion","Weapon / Potion","Equipment"];
 
 function blankCharacter() {
   return {
