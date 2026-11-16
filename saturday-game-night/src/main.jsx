@@ -130,8 +130,9 @@ function App() {
   const isAdmin = session?.user?.app_metadata?.role === "admin";
   const isGameAdmin = session?.user?.app_metadata?.role === "game_admin";
   const showAdminControls = isAdmin && adminMode;
-  const canManageScoreboard = (isAdmin || isGameAdmin) && !settings?.is_archived;
-  const canManageAttendance = (isAdmin || isGameAdmin) && !settings?.is_archived;
+  const hasScoreboardPermission = isAdmin || isGameAdmin;
+  const canManageScoreboard = hasScoreboardPermission && scoreboardMode && !settings?.is_archived;
+  const canManageAttendance = hasScoreboardPermission && !settings?.is_archived;
   const canViewVoteDetails = isAdmin || isGameAdmin;
 
   useEffect(() => {
@@ -1030,7 +1031,7 @@ function App() {
 
       )}
       {activeTab === "scoreboard" && (
-      <section className={"panel history "+(scoreboardMode?"scoreboard-editing":"")}><div className="crew-head"><div><small>THE SCOREBOARD</small><h2>Game round history</h2></div><div className="scoreboard-heading-actions"><label className="scoreboard-event-picker">Game Night<select aria-label="Select Game Night for all pages" value={selectedEventId || ""} onChange={e => selectGameNight(e.target.value)}>{gameNights.map(event => <option key={event.id} value={event.id}>{event.event_title} · {displayEventDate(event.event_date)}{event.is_archived ? " · Archived" : ""}</option>)}</select></label><button type="button" className="secondary current-event-button" onClick={() => currentGameNight && selectGameNight(currentGameNight.id)} disabled={!currentGameNight || selectedEventId === currentGameNight.id}>Current Game Night</button><span>{rounds.length} rounds recorded</span>{canManageScoreboard && <button className={"admin-mode-toggle scoreboard-edit-button "+(scoreboardMode?"active":"")} onClick={toggleScoreboardEditing} disabled={busy || settings?.is_archived}><Trophy size={14}/>{scoreboardMode?"Done editing":"Edit scoreboard"}</button>}</div></div>{scoreboardMode && <p className="scoreboard-edit-hint">Editing mode is on. Open a game below to add rounds or update placements and scores.</p>}
+      <section className={"panel history "+(scoreboardMode?"scoreboard-editing":"")}><div className="crew-head"><div><small>THE SCOREBOARD</small><h2>Game round history</h2></div><div className="scoreboard-heading-actions"><label className="scoreboard-event-picker">Game Night<select aria-label="Select Game Night for all pages" value={selectedEventId || ""} onChange={e => selectGameNight(e.target.value)}>{gameNights.map(event => <option key={event.id} value={event.id}>{event.event_title} · {displayEventDate(event.event_date)}{event.is_archived ? " · Archived" : ""}</option>)}</select></label><button type="button" className="secondary current-event-button" onClick={() => currentGameNight && selectGameNight(currentGameNight.id)} disabled={!currentGameNight || selectedEventId === currentGameNight.id}>Current Game Night</button><span>{rounds.length} rounds recorded</span>{hasScoreboardPermission && <button className={"admin-mode-toggle scoreboard-edit-button "+(scoreboardMode?"active":"")} onClick={toggleScoreboardEditing} disabled={busy || settings?.is_archived}><Trophy size={14}/>{scoreboardMode?"Done editing":"Edit scoreboard"}</button>}</div></div>{scoreboardMode && <p className="scoreboard-edit-hint">Editing mode is on. Open a game below to add rounds or update placements and scores.</p>}
         {games.map(game => {
           const gameRounds = rounds.filter(r => r.game_id === game.id).sort((a,b)=>a.round_number-b.round_number);
           return <div className="history-game" key={game.id}><div className="history-game-head"><b>{game.title}</b><span>{gameRounds.length} {gameRounds.length===1?"round":"rounds"}</span><button className="text-action" onClick={()=>setExpandedRounds(v=>({...v,[game.id]:!v[game.id]}))}>{expandedRounds[game.id] ? <ChevronUp size={15}/> : <ChevronDown size={15}/>} {expandedRounds[game.id] ? "Hide" : "View"}</button></div>
