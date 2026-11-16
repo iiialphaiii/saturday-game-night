@@ -120,7 +120,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
   async function loadAudit(sheetId) {
     if (!canAdminEdit || !sheetId) { setAudit([]); return; }
     const {data,error} = await db.from("player_sheet_audit")
-      .select("id,owner_id,actor_user_id,actor_participant_id,actor_role,action,summary,created_at")
+      .select("id,owner_id,actor_user_id,actor_participant_id,actor_role,action,summary,created_at,actor:participants!player_sheet_audit_actor_participant_id_fkey(name)")
       .eq("sheet_id",sheetId).order("created_at",{ascending:false}).limit(20);
     if (error) { setAudit([]); return; }
     setAudit(data || []);
@@ -297,7 +297,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       </div>
       {!isOwner && canAdminEdit && <div className="hqps-admin-edit">
         <span><ShieldCheck size={15}/> Admin / Game Admin access</span>
-        <button type="button" className={adminEditMode?"primary":"secondary"} onClick={()=>setAdminEditMode(value=>!value)}><Pencil size={13}/>{adminEditMode?"Finish admin editing":"Admin Edit Player Sheet"}</button>
+        <button type="button" className={adminEditMode?"primary":"secondary"} onClick={()=>{if(adminEditMode && dirty){saveSheet(false);return;}setAdminEditMode(value=>!value);}}><Pencil size={13}/>{adminEditMode?(dirty?"Save before finishing":"Finish admin editing"):"Admin Edit Player Sheet"}</button>
       </div>}
       <fieldset className="hqps-fieldset" disabled={!canEdit || working}>
         <div className="hqps-name-grid">
@@ -356,7 +356,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
         <span className="hqps-save-caption">{saveStatus==="saved"?"Saved to your account":statusText}{savedAt?" · "+formatSavedAt(savedAt):""}</span>
       </div>
       {message && <p className="hqps-message" role="status">{message}</p>}
-      {canAdminEdit && audit.length>0 && <details className="hqps-audit"><summary>Admin edit history ({audit.length}) <ChevronDown size={14}/></summary>{audit.map(entry=><div key={entry.id}><b>{entry.actor_role==="admin"?"Admin":entry.actor_role==="game_admin"?"Game Admin":"Authorized editor"}</b><span>{entry.summary || entry.action} · {formatSavedAt(entry.created_at)}</span></div>)}</details>}
+      {canAdminEdit && audit.length>0 && <details className="hqps-audit"><summary>Admin edit history ({audit.length}) <ChevronDown size={14}/></summary>{audit.map(entry=><div key={entry.id}><b>{entry.actor?.name || (entry.actor_role==="admin"?"Admin":entry.actor_role==="game_admin"?"Game Admin":"Authorized editor")}</b><span>{entry.actor_role==="admin"?"Admin":entry.actor_role==="game_admin"?"Game Admin":"Editor"} · {entry.summary || entry.action} · {formatSavedAt(entry.created_at)}</span></div>)}</details>}
     </>}
   </section>;
 }
