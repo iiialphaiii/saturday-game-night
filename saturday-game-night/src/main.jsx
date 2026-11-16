@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Gamepad2, Plus, ThumbsUp, ThumbsDown, Users, Trophy, CalendarDays, Clock3, RefreshCw, LogOut, Check, Sparkles, Info, Shield, Settings, Trash2, Pencil, MapPin, ChevronDown, ChevronUp, Medal, UserCheck, UserX, Dices, X } from "lucide-react";
 import "./styles.css";
 import { APP_VERSION } from "./version.js";
+import HeroQuestPlayerSheets from "./HeroQuestPlayerSheets.jsx";
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -1099,6 +1100,7 @@ function App() {
         <span className="navigation-spacer"/><button type="button" onClick={()=>{setAccountMode(true);setError("");setNotice("");}}><Settings size={15}/> Account</button>
         {isAdmin && <button type="button" className={adminMode?"active":""} onClick={()=>{if(adminMode)setActiveTab("attendance");setAdminMode(v=>!v);}}><Shield size={15}/>{adminMode?"Admin mode":"Normal mode"}</button>}
       </nav></div>{activeTab === "tools" && <>
+      <HeroQuestPlayerSheets db={db} participantId={participantId} participantName={name}/>
       <section className="panel game-tools-panel">
         <div className="panel-title"><div><small>PLAYER TOOLKIT</small><h2>Dice Roller</h2></div><span className="tile"><Dices size={18}/></span></div>
         <p className="muted">Create one or more groups of dice. Every die in a group has the same number of sides.</p>
