@@ -16,8 +16,7 @@ const EXPANSIONS = [
   "Wizards of Morcar",
   "The Rogue Heir of Elethorn",
   "The Path of the Wandering Monk",
-  "Commander of the Guardian Knights",
-  "First Light"
+  "Commander of the Guardian Knights"
 ];
 
 const ITEM_CATALOG = [
@@ -34,13 +33,18 @@ const ITEM_CATALOG = [
   ...["Raven's Talon","The Cloak of Shadows","The Scales of Elethorn","Dawnshield","Phoenix Ash"].map(name => ({name,category:"Artifact",source:"Rise of the Dread Moon"})),
   ...["Rock Skin","Lightning Bolt","Water of Healing","Heal Body"].map(name => ({name:"Spell Scroll: "+name,category:"Artifact / Scroll",source:"Prophecy of Telor"})),
   ...["Potion of Restoration","Potion of Magic","Potion of Healing","Wand"].map(name => ({name,category:"Equipment / Potion",source:"Prophecy of Telor"})),
+  ...["Crown of Shadows","Dragon Spear","Magical Throwing Dagger","Oil of Acid Immunity","Spell Scroll: Lightning Bolt","Spell Scroll: Tempest"].map(name => ({name,category:"Artifact",source:"The Crypt of Perpetual Darkness"})),
+  {name:"Bandolier",category:"Equipment",source:"The Rogue Heir of Elethorn"},
+  ...["Potion of Fire Resistance","Potion of Magic Resistance","Potion of Magical Aptitude"].map(name => ({name,category:"Potion",source:"Wizards of Morcar"})),
+  {name:"Ogre Lord's Crown",category:"Treasure",source:"Against the Ogre Horde"},
+  {name:"Emeralds",category:"Treasure",source:"Against the Ogre Horde"},
   ...["Anti-Poison Quill","Dust of Disappearance","Rabbit Boots","Spell Scroll: Courage","Spell Scroll: Fire of Wrath","Spell Scroll: Tempest"].map(name => ({name,category:"Artifact / Scroll",source:"Spirit Queen's Torment"})),
   ...["Rapier","Potion of Restoration","Potion of Battle","Potion of Dexterity","Venom Antidote"].map(name => ({name,category:"Weapon / Potion",source:"Spirit Queen's Torment"})),
   ...["Battle","Dexterity","Restoration","Venom Antidote"].map(name => ({name,category:"Potion",source:"Kellar's Keep / Return of the Witch Lord"}))
 ].map((item, index) => ({...item, id:"hq-item-"+index}));
 
 const HERO_TYPES = ["Barbarian","Dwarf","Elf","Wizard","Warlock","Bard","Druid","Monk","Rogue","Other"];
-const CATEGORIES = ["All","Weapon","Armor","Tool","Artifact","Artifact / Scroll","Artifact / Relic","Treasure / Potion","Potion"];
+const CATEGORIES = ["All","Weapon","Armor","Tool","Artifact","Artifact / Scroll","Artifact / Relic","Treasure / Potion","Potion","Equipment / Potion","Weapon / Potion","Equipment"];
 
 function blankCharacter() {
   return {
@@ -329,7 +333,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
             <div className="hqps-custom-grid">
               <label>Item name<input value={customName} onChange={e=>setCustomName(e.target.value)} placeholder="Enter item name"/></label>
               <label>Category<select value={customCategory} onChange={e=>setCustomCategory(e.target.value)}>{["Weapon","Armor","Tool","Artifact","Potion","Treasure","Other"].map(x=><option key={x}>{x}</option>)}</select></label>
-              <label>Source<select value={customSource} onChange={e=>setCustomSource(e.target.value)}><option>Custom</option><option>Base Game</option>{EXPANSIONS.map(source=><option key={source}>{source}</option>)}</select></label>
+              <label>Source<select value={customSource} onChange={e=>setCustomSource(e.target.value)}><option>Custom</option><option>Base Game</option>{EXPANSIONS.map(source=><option key={source}>{source}</option>)}<option>Kellar's Keep / Return of the Witch Lord</option></select></label>
             </div>
             <label>Description / special ability<textarea rows="2" value={customDescription} onChange={e=>setCustomDescription(e.target.value)} placeholder="Optional item details"/></label>
             <button type="button" className="secondary" onClick={addCustomItem} disabled={!canEdit || !customName.trim()}><Plus size={14}/> Add item</button>
