@@ -1,2 +1,2 @@
 // Updated automatically whenever a pull request is merged into main.
-export const APP_VERSION = 59;
+export const APP_VERSION = 60;
