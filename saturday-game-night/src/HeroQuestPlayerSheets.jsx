@@ -112,7 +112,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     const {data,error} = await db.from("player_sheets")
       .select("id,owner_id,sheet_name,sheet_data,created_at,updated_at,owner:participants!player_sheets_owner_id_fkey(name)")
       .order("updated_at",{ascending:false});
-    if (error) { setMessage("Unable to load player sheets: "+error.message); return; }
+    if (error) { setMessage("Unable to load player sheets: "+error.message); setLoading(false); return []; }
     setSheets(data || []);
     setLoading(false);
     return data || [];
@@ -182,7 +182,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     await loadAudit(sheet.id);
   }
 
-  async function createSheet() {
+  function toggleHideOthers() {\n    const next = !hideOthers;\n    if (next && selectedSheet && !isOwner) {\n      const own = sheets.find(sheet => sheet.owner_id === participantId);\n      if (own) openSheet(own);\n    }\n    setHideOthers(next);\n  }\n\n  async function createSheet() {
     if (!participantId || working) return;
     setWorking(true); setSaveStatus("saving"); setMessage("");
     const initial = blankCharacter();
@@ -288,8 +288,8 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
           {visibleSheets.map(sheet=><option key={sheet.id} value={sheet.id}>{sheet.owner?.name || "Player"} · {sheet.sheet_name}</option>)}
         </select>
       </label>
-      <button type="button" className="secondary" onClick={()=>setHideOthers(value=>!value)}><span>{hideOthers?<Eye size={14}/>:<EyeOff size={14}/>}</span>{hideOthers?"Show other players":"Hide other players"}</button>
-      <button type="button" className="primary" onClick={createSheet} disabled={working}><FilePlus2 size={14}/> New sheet</button>
+      <button type="button" className="secondary" onClick={toggleHideOthers}><span>{hideOthers?<Eye size={14}/>:<EyeOff size={14}/>}</span>{hideOthers?"Show other players":"Hide other players"}</button>
+      <button type="button" className="primary" onClick={createSheet} disabled={working || dirty}><FilePlus2 size={14}/> New sheet</button>
       <button type="button" className="quiet" onClick={loadSheets} title="Refresh sheets"><RefreshCw size={14}/></button>
     </div>
     {loading ? <p className="muted">Loading character sheets…</p> : !selectedSheet ? <div className="hqps-empty"><BookOpen size={26}/><b>No character sheet selected</b><span>Create your first sheet or choose another player's saved sheet.</span><button type="button" className="primary" onClick={createSheet} disabled={working}><Plus size={14}/> Create character sheet</button></div> : <>
