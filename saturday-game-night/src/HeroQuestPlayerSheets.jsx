@@ -111,10 +111,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     if (error) { setMessage("Unable to load player sheets: "+error.message); return; }
     setSheets(data || []);
     setLoading(false);
-    if (!selectedSheetId && data?.length) {
-      const own = data.find(sheet => sheet.owner_id === participantId) || data[0];
-      openSheet(own);
-    }
+    return data || [];
   }
 
   async function loadAudit(sheetId) {
@@ -133,7 +130,11 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       const {data,error} = await db.rpc("current_user_can_manage_scoreboard");
       if (active) {
         setCanAdminEdit(!error && data === true);
-        await loadSheets();
+        const rows = await loadSheets();
+        if (active && rows?.length) {
+          const own = rows.find(sheet => sheet.owner_id === participantId) || rows[0];
+          openSheet(own);
+        }
       }
     }
     initialize();
