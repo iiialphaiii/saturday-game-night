@@ -69,6 +69,25 @@ function formatSavedAt(value) {
   return new Date(value).toLocaleString([], {month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"});
 }
 
+function hasSheetInformation(sheet) {
+  const data = sheet?.sheet_data || {};
+  return Boolean(
+    (data.characterName || "").trim() ||
+    (data.spells || "").trim() ||
+    (data.questsCompleted || "").trim() ||
+    (data.notes || "").trim() ||
+    Number(data.gold || 0) > 0 ||
+    (Array.isArray(data.inventory) && data.inventory.length > 0) ||
+    (data.heroType && data.heroType !== "Barbarian") ||
+    (data.bodyStarting != null && Number(data.bodyStarting) !== 8) ||
+    (data.bodyCurrent != null && Number(data.bodyCurrent) !== 8) ||
+    (data.mindStarting != null && Number(data.mindStarting) !== 2) ||
+    (data.mindCurrent != null && Number(data.mindCurrent) !== 2) ||
+    (data.attackDice != null && Number(data.attackDice) !== 3) ||
+    (data.defendDice != null && Number(data.defendDice) !== 2)
+  );
+}
+
 export default function HeroQuestPlayerSheets({ db, participantId, participantName }) {
   const [sheets,setSheets] = useState([]);
   const [selectedSheetId,setSelectedSheetId] = useState("");
@@ -97,10 +116,10 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
   const selectedSheet = sheets.find(sheet => sheet.id === selectedSheetId) || null;
   const isOwner = !!selectedSheet && selectedSheet.owner_id === participantId;
   const canEdit = !!selectedSheet && (isOwner || (canAdminEdit && adminEditMode));
-  const visibleSheets = useMemo(() => sheets.filter(sheet => {
-    const populated = sheet.sheet_name || sheet.sheet_data;
-    return !!populated && (!hideOthers || sheet.owner_id === participantId);
-  }), [sheets,hideOthers,participantId]);
+  const visibleSheets = useMemo(() => sheets.filter(sheet =>
+    (sheet.owner_id === participantId || hasSheetInformation(sheet)) &&
+    (!hideOthers || sheet.owner_id === participantId)
+  ), [sheets,hideOthers,participantId]);
   const filteredItems = useMemo(() => ITEM_CATALOG.filter(item =>
     (itemCategory === "All" || item.category === itemCategory) &&
     (itemSource === "All sources" || item.source === itemSource) &&
