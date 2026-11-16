@@ -40,7 +40,7 @@ const ITEM_CATALOG = [
   {name:"Emeralds",category:"Treasure",source:"Against the Ogre Horde"},
   ...["Anti-Poison Quill","Dust of Disappearance","Rabbit Boots","Spell Scroll: Courage","Spell Scroll: Fire of Wrath","Spell Scroll: Tempest"].map(name => ({name,category:"Artifact / Scroll",source:"Spirit Queen's Torment"})),
   ...["Rapier","Potion of Restoration","Potion of Battle","Potion of Dexterity","Venom Antidote"].map(name => ({name,category:"Weapon / Potion",source:"Spirit Queen's Torment"})),
-  ...["Battle","Dexterity","Restoration","Venom Antidote"].map(name => ({name,category:"Potion",source:"Kellar's Keep / Return of the Witch Lord"}))
+  ...["Potion of Battle","Potion of Dexterity","Potion of Restoration","Venom Antidote"].map(name => ({name,category:"Potion",source:"Kellar's Keep / Return of the Witch Lord"}))
 ].map((item, index) => ({...item, id:"hq-item-"+index}));
 
 const HERO_TYPES = ["Barbarian","Dwarf","Elf","Wizard","Warlock","Bard","Druid","Monk","Rogue","Other"];
