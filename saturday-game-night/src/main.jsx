@@ -155,10 +155,15 @@ function App() {
     setCreatedDice(dice); setDiceResults([]); setDiceToolMessage(dice.length + " dice created. Ready to roll!");
   }
 
-  function rollDice() {
+  function rollDice(groupId = null) {
     if (!createdDice.length) return;
-    setDiceResults(createdDice.map(die => ({ ...die, result: Math.floor(Math.random() * die.sides) + 1 })));
-    setDiceToolMessage("Dice rolled!");
+    const diceToRoll = groupId === null ? createdDice : createdDice.filter(die => die.groupId === groupId);
+    if (!diceToRoll.length) return;
+    const nextResults = diceToRoll.map(die => ({ ...die, result: Math.floor(Math.random() * die.sides) + 1 }));
+    setDiceResults(current => groupId === null
+      ? nextResults
+      : [...current.filter(result => result.groupId !== groupId), ...nextResults]);
+    setDiceToolMessage(groupId === null ? "All dice rolled!" : "Dice group rolled!");
   }
 
   function removeDie(dieId) {
@@ -1099,7 +1104,7 @@ function App() {
         <p className="muted">Create one or more groups of dice. Every die in a group has the same number of sides.</p>
         <div className="dice-group-list">
           {diceGroups.map((group,index)=><div className="dice-group-row" key={group.id}>
-            <div className="dice-group-heading"><strong>Dice group {index+1}</strong><button type="button" className="quiet dice-remove" disabled={diceGroups.length===1} onClick={()=>{setDiceGroups(groups=>groups.filter(item=>item.id!==group.id));setCreatedDice([]);setDiceResults([]);setDiceToolMessage("");}}><X size={14}/> Remove group</button></div>
+            <div className="dice-group-heading"><strong>Dice group {index+1}</strong><button type="button" className="quiet dice-remove" disabled={diceGroups.length===1} onClick={()=>{setDiceGroups(groups=>groups.filter(item=>item.id!==group.id));setCreatedDice(dice=>dice.filter(die=>die.groupId!==group.id));setDiceResults(results=>results.filter(result=>result.groupId!==group.id));setDiceToolMessage("Dice group removed.");}}><X size={14}/> Remove group</button></div>
             <label>How many dice?<input type="number" min="1" max="100" value={group.count} onChange={e=>{setDiceGroups(groups=>groups.map(item=>item.id===group.id?{...item,count:e.target.value}:item));setCreatedDice([]);setDiceResults([]);}} /></label>
             <label>How many sides per die?<input type="number" min="2" max="1000" value={group.sides} onChange={e=>{setDiceGroups(groups=>groups.map(item=>item.id===group.id?{...item,sides:e.target.value}:item));setCreatedDice([]);setDiceResults([]);}} /></label>
           </div>)}
@@ -1112,8 +1117,9 @@ function App() {
         {diceToolMessage && <p className="dice-tool-message" role="status">{diceToolMessage}</p>}
         {createdDice.length>0 && <div className="dice-results-area">
           <div className="dice-results-heading"><div><small>YOUR DICE</small><h3>{createdDice.length} dice ready</h3></div><button type="button" className="quiet" onClick={()=>{setCreatedDice([]);setDiceResults([]);setDiceToolMessage("All dice removed.");}}><X size={14}/> Remove all</button></div>
-          <div className="dice-result-list">{createdDice.map((die,index)=>{const rolled=diceResults.find(result=>result.id===die.id);return <div className={"dice-result-card"+(rolled?" rolled":"")} key={die.id}><span>Die {index+1}</span><strong>{rolled?rolled.result:"—"}</strong><small>1–{die.sides}</small><button type="button" className="dice-single-remove" title="Remove this die" aria-label={"Remove die "+(index+1)} onClick={()=>removeDie(die.id)}><X size={13}/></button></div>;})}</div>
-          <button type="button" className="primary dice-roll-button" disabled={!createdDice.length} onClick={rollDice}><Dices size={16}/> Roll Dice</button>
+          <div className="dice-groups-results">{diceGroups.map((group,groupIndex)=>{const groupDice=createdDice.filter(die=>die.groupId===group.id);const groupResults=groupDice.map(die=>diceResults.find(result=>result.id===die.id)).filter(Boolean);const groupTotal=groupResults.reduce((sum,result)=>sum+result.result,0);return <section className="dice-group-results" key={group.id}><div className="dice-group-results-heading"><div><b>Dice group {groupIndex+1}</b><small>{groupDice.length} {groupDice.length===1?"die":"dice"} · 1–{group.sides}</small></div><div className="dice-group-total"><small>GROUP TOTAL</small><strong>{groupResults.length?groupTotal:"—"}</strong></div></div><div className="dice-result-list">{groupDice.map((die,index)=>{const rolled=diceResults.find(result=>result.id===die.id);return <div className={"dice-result-card"+(rolled?" rolled":"")} key={die.id}><span>Die {index+1}</span><strong>{rolled?rolled.result:"—"}</strong><small>1–{die.sides}</small><button type="button" className="dice-single-remove" title="Remove this die" aria-label={"Remove die from group "+(groupIndex+1)} onClick={()=>removeDie(die.id)}><X size={13}/></button></div>;})}</div><button type="button" className="secondary dice-roll-group-button" disabled={!groupDice.length} onClick={()=>rollDice(group.id)}><Dices size={14}/> Roll group {groupIndex+1}</button></section>;})}</div>
+          <div className="dice-grand-total"><div><small>ALL GROUPS TOTAL</small><strong>{diceResults.length?diceResults.reduce((sum,result)=>sum+result.result,0):"—"}</strong></div><span>{diceResults.length} of {createdDice.length} dice rolled</span></div>
+          <button type="button" className="primary dice-roll-button" disabled={!createdDice.length} onClick={()=>rollDice()}><Dices size={16}/> Roll All</button>
         </div>}
       </section>
       </>}{activeTab === "attendance" && <>
