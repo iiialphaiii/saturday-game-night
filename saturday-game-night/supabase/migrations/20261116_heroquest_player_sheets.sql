@@ -26,7 +26,6 @@ alter table public.player_sheets enable row level security;
 alter table public.player_sheet_audit enable row level security;
 grant select, insert, update, delete on public.player_sheets to authenticated;
 grant select on public.player_sheet_audit to authenticated;
-grant usage, select on sequence public.player_sheet_audit_id_seq to authenticated;
 
 drop policy if exists "Authenticated users can view player sheets" on public.player_sheets;
 create policy "Authenticated users can view player sheets" on public.player_sheets for select to authenticated using (true);
