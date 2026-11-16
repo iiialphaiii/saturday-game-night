@@ -201,6 +201,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
 
   async function saveSheet(isAutomatic=false) {
     if (!selectedSheet || !canEdit || working) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
     setWorking(true);
     setSaveStatus("saving");
     setMessage("");
