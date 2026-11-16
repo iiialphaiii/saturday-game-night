@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, CheckCircle2, ChevronDown, Eye, EyeOff, FilePlus2, LoaderCircle, Pencil, Plus, RefreshCw, Save, Search, ShieldCheck, Trash2, X } from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronDown, Dices, Eye, EyeOff, FilePlus2, LoaderCircle, Pencil, Plus, RefreshCw, Save, Search, Shield, ShieldCheck, Skull, Trash2, X } from "lucide-react";
 import "./player-sheets.css";
 
 const EXPANSIONS = [
@@ -112,6 +112,10 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
   const [customCategory,setCustomCategory] = useState("Other");
   const [customDescription,setCustomDescription] = useState("");
   const [audit,setAudit] = useState([]);
+  const [showHeroQuestDice,setShowHeroQuestDice] = useState(false);
+  const [heroQuestDiceCount,setHeroQuestDiceCount] = useState("6");
+  const [heroQuestDiceResults,setHeroQuestDiceResults] = useState([]);
+  const [heroQuestDiceMessage,setHeroQuestDiceMessage] = useState("");
   const saveTimer = useRef(null);
   const saveFunction = useRef(null);
 
@@ -127,6 +131,11 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     (itemSource === "All sources" || item.source === itemSource) &&
     item.name.toLowerCase().includes(itemSearch.toLowerCase())
   ), [itemSearch,itemCategory,itemSource]);
+  const heroQuestDiceTotals = useMemo(() => ({
+    skull:heroQuestDiceResults.filter(face=>face==="skull").length,
+    heroShield:heroQuestDiceResults.filter(face=>face==="heroShield").length,
+    monsterShield:heroQuestDiceResults.filter(face=>face==="monsterShield").length
+  }), [heroQuestDiceResults]);
 
   async function loadSheets() {
     if (!db || !participantId) return;
@@ -306,6 +315,20 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     setMessage("Sheet deleted."); setWorking(false);
   }
 
+  function rollHeroQuestDice() {
+    const count = Number(heroQuestDiceCount);
+    if (!Number.isInteger(count) || count < 1 || count > 100) {
+      setHeroQuestDiceMessage("Choose between 1 and 100 HeroQuest combat dice.");
+      return;
+    }
+    const faces = Array.from({length:count}, () => {
+      const roll = Math.floor(Math.random() * 6);
+      return roll < 3 ? "skull" : roll < 5 ? "heroShield" : "monsterShield";
+    });
+    setHeroQuestDiceResults(faces);
+    setHeroQuestDiceMessage("Rolled "+count+" HeroQuest combat dice.");
+  }
+
   const statusText = saveStatus === "saving" ? "Saving…" : saveStatus === "unsaved" ? "Unsaved changes" : saveStatus === "failed" ? "Save failed" : "Saved";
   const statusClass = saveStatus === "failed" ? "failed" : saveStatus === "unsaved" ? "unsaved" : saveStatus === "saving" ? "saving" : "saved";
 
@@ -395,5 +418,24 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       {message && <p className="hqps-message" role="status">{message}</p>}
       {canAdminEdit && audit.length>0 && <details className="hqps-audit"><summary>Admin edit history ({audit.length}) <ChevronDown size={14}/></summary>{audit.map(entry=><div key={entry.id}><b>{entry.actor?.name || (entry.actor_role==="admin"?"Admin":entry.actor_role==="game_admin"?"Game Admin":"Authorized editor")}</b><span>{entry.actor_role==="admin"?"Admin":entry.actor_role==="game_admin"?"Game Admin":"Editor"} · {entry.summary || entry.action} · {formatSavedAt(entry.created_at)}</span></div>)}</details>}
     </>}
+    <div className="hq-dice-tool">
+      <div className="hq-dice-toggle-row">
+        <div><small>OPTIONAL HEROQUEST TOOL</small><h3><Dices size={18}/> HeroQuest Dice Roller</h3><p className="muted">Uses the HeroQuest combat die: 3 skulls, 2 white shields and 1 black shield.</p></div>
+        <button type="button" className="secondary" aria-expanded={showHeroQuestDice} onClick={()=>setShowHeroQuestDice(value=>!value)}>{showHeroQuestDice?"Hide HeroQuest dice":"Use HeroQuest dice"}</button>
+      </div>
+      {showHeroQuestDice && <div className="hq-dice-body">
+        <label className="hq-dice-count">How many combat dice?<input type="number" min="1" max="100" value={heroQuestDiceCount} onChange={e=>setHeroQuestDiceCount(e.target.value)}/></label>
+        <div className="hq-dice-actions"><button type="button" className="primary" onClick={rollHeroQuestDice}><Dices size={14}/> Roll HeroQuest dice</button><button type="button" className="secondary" onClick={()=>{setHeroQuestDiceResults([]);setHeroQuestDiceMessage("");}}>Clear results</button></div>
+        {heroQuestDiceMessage && <p className="hq-dice-message" role="status">{heroQuestDiceMessage}</p>}
+        {heroQuestDiceResults.length>0 && <>
+          <div className="hq-dice-totals">
+            <div className="hq-dice-total skull"><Skull size={18}/><b>{heroQuestDiceTotals.skull}</b><span>Skulls</span></div>
+            <div className="hq-dice-total hero-shield"><Shield size={18}/><b>{heroQuestDiceTotals.heroShield}</b><span>White shields</span></div>
+            <div className="hq-dice-total monster-shield"><Shield size={18} fill="currentColor"/><b>{heroQuestDiceTotals.monsterShield}</b><span>Black shields</span></div>
+          </div>
+          <div className="hq-dice-results" aria-label="HeroQuest dice results">{heroQuestDiceResults.map((face,index)=><div className={"hq-die "+face} key={index}><span>{face==="skull"?<Skull size={22}/>:<Shield size={22} fill={face==="monsterShield"?"currentColor":"none"}/>}</span><small>Die {index+1}</small></div>)}</div>
+        </>}
+      </div>}
+    </div>
   </section>;
 }
