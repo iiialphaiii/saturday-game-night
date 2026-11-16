@@ -31,6 +31,11 @@ const ITEM_CATALOG = [
   ...["Ancient Staff","Bone Wand","Elven Boots","Elven Bow of Vindication","Elven Bracers","Sky Orb","Spell Scroll: Treasure Without Doom"].map(name => ({name,category:"Artifact / Scroll",source:"The Mage of the Mirror"})),
   ...["Air Walk","Elven Cloak of Passage","Treasure Hoard!","Wolfsbane Potion","Potion of Recall","Potion of Vision","Potion of Superior Restoration"].map(name => ({name,category:"Treasure / Potion",source:"The Mage of the Mirror"})),
   ...["Ancient Dwarven Relic","Bracers of the Wild","Emberwrought Diadem","Girdle of Might"].map(name => ({name,category:"Artifact / Relic",source:"Jungles of Delthrak"})),
+  ...["Raven's Talon","The Cloak of Shadows","The Scales of Elethorn","Dawnshield","Phoenix Ash"].map(name => ({name,category:"Artifact",source:"Rise of the Dread Moon"})),
+  ...["Rock Skin","Lightning Bolt","Water of Healing","Heal Body"].map(name => ({name:"Spell Scroll: "+name,category:"Artifact / Scroll",source:"Prophecy of Telor"})),
+  ...["Potion of Restoration","Potion of Magic","Potion of Healing","Wand"].map(name => ({name,category:"Equipment / Potion",source:"Prophecy of Telor"})),
+  ...["Anti-Poison Quill","Dust of Disappearance","Rabbit Boots","Spell Scroll: Courage","Spell Scroll: Fire of Wrath","Spell Scroll: Tempest"].map(name => ({name,category:"Artifact / Scroll",source:"Spirit Queen's Torment"})),
+  ...["Rapier","Potion of Restoration","Potion of Battle","Potion of Dexterity","Venom Antidote"].map(name => ({name,category:"Weapon / Potion",source:"Spirit Queen's Torment"})),
   ...["Battle","Dexterity","Restoration","Venom Antidote"].map(name => ({name,category:"Potion",source:"Kellar's Keep / Return of the Witch Lord"}))
 ].map((item, index) => ({...item, id:"hq-item-"+index}));
 
@@ -294,7 +299,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
         <span><ShieldCheck size={15}/> Admin / Game Admin access</span>
         <button type="button" className={adminEditMode?"primary":"secondary"} onClick={()=>setAdminEditMode(value=>!value)}><Pencil size={13}/>{adminEditMode?"Finish admin editing":"Admin Edit Player Sheet"}</button>
       </div>}
-      <fieldset className="hqps-fieldset" disabled={!canEdit}>
+      <fieldset className="hqps-fieldset" disabled={!canEdit || working}>
         <div className="hqps-name-grid">
           <label>Sheet name<input value={sheetName} onChange={e=>{setSheetName(e.target.value);setDirty(true);setSaveStatus("unsaved");}} maxLength={80}/></label>
           <label>Character name<input value={draft.characterName} onChange={e=>updateField("characterName",e.target.value)} maxLength={60} placeholder="Enter hero name"/></label>
