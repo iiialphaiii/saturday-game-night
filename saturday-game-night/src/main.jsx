@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createClient } from "@supabase/supabase-js";
 import { Gamepad2, Plus, ThumbsUp, ThumbsDown, Users, Trophy, CalendarDays, Clock3, RefreshCw, LogOut, Check, Sparkles, Info, Shield, Settings, Trash2, Pencil, MapPin, ChevronDown, ChevronUp, Medal, UserCheck, UserX } from "lucide-react";
@@ -86,6 +86,10 @@ function App() {
   const [settings, setSettings] = useState(null);
   const [gameNights, setGameNights] = useState([]);
   const [selectedEventId, setSelectedEventId] = useState(null);
+  const refreshRequestRef = useRef(0);
+  const chatRequestRef = useRef(0);
+  const selectedEventIdRef = useRef(selectedEventId);
+  selectedEventIdRef.current = selectedEventId;
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [attendance, setAttendance] = useState([]);
@@ -206,6 +210,7 @@ function App() {
 
   async function refresh() {
     if (!db || !session) return;
+    const refreshRequest = ++refreshRequestRef.current;
     const [eventsResult, p, current, roleResult, displayRoleResult, requests] = await Promise.all([
       db.from("game_nights").select("*").order("event_date", { ascending: true }),
       db.from("participants").select("*").order("created_at"),
@@ -214,6 +219,7 @@ function App() {
       db.rpc("list_participant_display_roles"),
       db.from("participant_link_requests").select("*").order("requested_at", { ascending: false })
     ]);
+    if (refreshRequest !== refreshRequestRef.current) return;
     const issue = [eventsResult,p,current,roleResult,displayRoleResult,requests].find(x=>x.error);
     if (issue) { setError(issue.error.message); setLoading(false); return; }
     const events = eventsResult.data || [];
@@ -241,7 +247,7 @@ function App() {
       else setName("");
     }
     if (!activeId) {
-      setSettings(null);setGames([]);setVotes([]);setVoteCounts([]);setRounds([]);setPlacements([]);setAttendance([]);setChatMessages([]);setLoading(false);return;
+      setSettings(null);setGames([]);setVotes([]);setVoteCounts([]);setRounds([]);setPlacements([]);setAttendance([]);setEventArrivals([]);setMyAttendance("");setArrivalTime("");setChatMessages([]);setLoading(false);return;
     }
     const [eventResult,gamesResult,attendanceResult,arrivalResult] = await Promise.all([
       db.from("game_nights").select("*").eq("id",activeId).maybeSingle(),
@@ -249,6 +255,7 @@ function App() {
       db.from("game_attendance").select("*").eq("event_id",activeId),
       db.from("game_event_arrivals").select("*").eq("event_id",activeId)
     ]);
+    if (refreshRequest !== refreshRequestRef.current) return;
     const issue2=[eventResult,gamesResult,attendanceResult,arrivalResult].find(x=>x.error);
     if(issue2) setError(issue2.error.message);
     const eventGames=gamesResult.data||[], gameIds=eventGames.map(g=>g.id);
@@ -259,6 +266,7 @@ function App() {
     ]) : [{data:[],error:null},{data:[],error:null},{data:[],error:null}];
     const roundIds=(roundsResult.data||[]).map(r=>r.id);
     const placementsResult=roundIds.length ? await db.from("game_round_placements").select("*").in("round_id",roundIds).order("place") : {data:[],error:null};
+    if (refreshRequest !== refreshRequestRef.current) return;
     const issue3=[votesResult,voteCountsResult,roundsResult,placementsResult].find(x=>x.error);
     if(issue3) setError(issue3.error.message);
     if(eventResult.data){
@@ -275,13 +283,18 @@ function App() {
     const myArrival=(arrivalResult.data||[]).find(x=>x.participant_id===current.data);
     setArrivalTime(toInputTime(myArrival?.arrival_time));
     setMyAttendance((attendanceResult.data||[]).find(x=>x.participant_id===current.data)?.status||"");
+    if (refreshRequest !== refreshRequestRef.current) return;
     await loadChatMessages(activeId);
+    if (refreshRequest !== refreshRequestRef.current) return;
     setLoading(false);
   }
 
   async function loadChatMessages(eventId=selectedEventId) {
     if(!db||!session||!eventId) return;
-    const {data,error:chatError}=await db.from("game_chat_messages").select("*").eq("event_id",eventId).order("created_at",{ascending:false}).limit(100);
+    const chatRequest = ++chatRequestRef.current;
+    const requestedEventId = eventId;
+    const {data,error:chatError}=await db.from("game_chat_messages").select("*").eq("event_id",requestedEventId).order("created_at",{ascending:false}).limit(100);
+    if (chatRequest !== chatRequestRef.current || selectedEventIdRef.current !== requestedEventId) return;
     if(chatError) setError(chatError.message); else setChatMessages((data||[]).reverse());
   }
 
@@ -377,7 +390,13 @@ function App() {
 
   function selectGameNight(eventId) {
     const chosen=gameNights.find(event=>event.id===eventId);
-    setSelectedEventId(eventId || null);setArrivalTime("");setEventArrivals([]);setCalendarOpen(false);setChatExpanded(false);setScoreboardMode(false);setError("");setNotice("");
+    refreshRequestRef.current += 1;
+    chatRequestRef.current += 1;
+    setSelectedEventId(eventId || null);
+    setArrivalTime("");setEventArrivals([]);setAttendance([]);setMyAttendance("");
+    setGames([]);setVotes([]);setVoteCounts([]);setRounds([]);setPlacements([]);setChatMessages([]);
+    setAttendanceDrafts({});setRoundNotes({});setPlacementDrafts({});setExpandedRounds({});setChatDraft("");setGameTitle("");setGameDescription("");
+    setCalendarOpen(false);setChatExpanded(false);setScoreboardMode(false);setError("");setNotice("");
     if(chosen) {
       setSettings(chosen);
       setEventTitleDraft(chosen.event_title||"Saturday Game Night");
