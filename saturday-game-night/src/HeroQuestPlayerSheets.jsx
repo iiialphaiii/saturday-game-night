@@ -155,8 +155,8 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
         setCanAdminEdit(!error && data === true);
         const rows = await loadSheets();
         if (active && rows?.length) {
-          const own = rows.find(sheet => sheet.owner_id === participantId) || rows[0];
-          openSheet(own);
+          const own = rows.find(sheet => sheet.owner_id === participantId) || rows.find(hasSheetInformation);
+          if (own) openSheet(own);
         }
       }
     }
@@ -206,6 +206,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     if (next && selectedSheet && !isOwner) {
       const own = sheets.find(sheet => sheet.owner_id === participantId);
       if (own) openSheet(own);
+      else { setSelectedSheetId(""); setSheetName(""); setDraft(blankCharacter()); setDirty(false); setAudit([]); }
     }
     setHideOthers(next);
   }
