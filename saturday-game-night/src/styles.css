@@ -73,3 +73,14 @@
 /* Game Admin participant check-in controls and crew timestamp */
 .attendance-admin-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.check-in-button{display:flex;align-items:center;gap:5px;min-height:32px;padding:0 10px;font-size:10px;white-space:nowrap}.check-in-label{display:inline-flex;align-items:center;gap:4px;color:#9fd8b4}.check-in-label svg{vertical-align:middle}
 @media(max-width:600px){.attendance-admin-actions{width:100%}.attendance-admin-actions button{flex:1}}
+
+
+/* Main page navigation and selected-event scoreboard controls */
+.main-page-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 18px;padding:8px;border:1px solid #2d3040;border-radius:12px;background:#151722}
+.main-page-nav button{display:flex;align-items:center;justify-content:center;gap:7px;min-height:38px;padding:0 15px;border:1px solid transparent;border-radius:8px;background:transparent;color:#a5a9b8;font:600 11px 'DM Sans';cursor:pointer}
+.main-page-nav button:hover{background:#222336;color:#e9e4ff}
+.main-page-nav button.active{border-color:#5b4a8c;background:#2a2440;color:#e1d8ff}
+.scoreboard-event-picker{display:flex;align-items:center;gap:7px;color:#aeb1c0;font-size:10px}
+.scoreboard-event-picker select{max-width:230px;min-width:150px;padding:8px 10px;border:1px solid #3b3e50;border-radius:8px;background:#11131d;color:#eee;font:11px 'DM Sans';color-scheme:dark}
+.current-event-button{height:34px;white-space:nowrap;font-size:10px}
+@media(max-width:600px){.main-page-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.main-page-nav button{padding:0 8px}.scoreboard-heading-actions{align-items:stretch}.scoreboard-event-picker{width:100%;justify-content:space-between}.scoreboard-event-picker select{flex:1;max-width:none}.current-event-button{width:auto}}
