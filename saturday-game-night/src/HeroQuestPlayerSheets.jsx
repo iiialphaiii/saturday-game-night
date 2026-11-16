@@ -182,7 +182,16 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     await loadAudit(sheet.id);
   }
 
-  function toggleHideOthers() {\n    const next = !hideOthers;\n    if (next && selectedSheet && !isOwner) {\n      const own = sheets.find(sheet => sheet.owner_id === participantId);\n      if (own) openSheet(own);\n    }\n    setHideOthers(next);\n  }\n\n  async function createSheet() {
+  function toggleHideOthers() {
+    const next = !hideOthers;
+    if (next && selectedSheet && !isOwner) {
+      const own = sheets.find(sheet => sheet.owner_id === participantId);
+      if (own) openSheet(own);
+    }
+    setHideOthers(next);
+  }
+
+  async function createSheet() {
     if (!participantId || working) return;
     setWorking(true); setSaveStatus("saving"); setMessage("");
     const initial = blankCharacter();
