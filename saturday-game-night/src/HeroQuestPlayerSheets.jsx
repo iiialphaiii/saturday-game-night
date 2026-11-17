@@ -60,7 +60,8 @@ function blankCharacter() {
     spells:"",
     questsCompleted:"",
     notes:"",
-    inventory:[]
+    inventory:[],
+    usedItems:[]
   };
 }
 
@@ -292,6 +293,42 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     setDirty(true);
   }
 
+  function useInventoryItem(index) {
+    if (!canEdit) return;
+    const item = draft.inventory[index];
+    if (!item || item.hidden || item.used) return;
+    const hasCharges = item.charges !== "" && item.charges != null;
+    const patch = {};
+    let details = "";
+    if (hasCharges) {
+      const charges = Number(item.charges);
+      if (!Number.isFinite(charges) || charges <= 0) { setMessage(item.name + " has no charges remaining."); return; }
+      patch.charges = charges - 1;
+      if (charges - 1 === 0) patch.used = true;
+      details = charges - 1 > 0 ? (charges - 1) + " charges remaining" : "Last charge used";
+    } else {
+      const quantity = Math.max(1, Number(item.quantity ?? 1));
+      if (quantity > 1) patch.quantity = quantity - 1;
+      else patch.used = true;
+      details = quantity > 1 ? (quantity - 1) + " remaining" : "Item consumed";
+    }
+    const usedRecord = {id:crypto.randomUUID(),sourceId:item.id || null,name:item.name,kind:"Inventory",source:item.source || "Custom",details,usedAt:new Date().toISOString()};
+    setDraft(current => ({...current,inventory:current.inventory.map((entry,i)=>i===index?{...entry,...patch}:entry),usedItems:[...(current.usedItems || []),usedRecord]}));
+    setDirty(true);
+    setMessage(item.name + " used and added to Used.");
+  }
+
+  function useSpellCard(index) {
+    if (!canEdit) return;
+    const card = (draft.spellCards || [])[index];
+    if (!card || card.hidden || card.used) return;
+    const kind = card.category === "Spell Scroll" ? "Scroll" : "Spell";
+    const usedRecord = {id:crypto.randomUUID(),sourceId:card.id || null,name:card.name,kind,source:card.source || "Custom",details:"Used",usedAt:new Date().toISOString()};
+    setDraft(current => ({...current,spellCards:(current.spellCards || []).map((entry,i)=>i===index?{...entry,used:true,usedAt:usedRecord.usedAt}:entry),usedItems:[...(current.usedItems || []),usedRecord]}));
+    setDirty(true);
+    setMessage(card.name + " moved to Used.");
+  }
+
   function addCatalogItem(item) {
     setDraft(current => ({...current,inventory:[...current.inventory,{id:crypto.randomUUID(),name:item.name,category:item.category,source:item.source,quantity:1,charges:"",equipped:false,description:"",custom:false}]}));
     setDirty(true);
@@ -336,7 +373,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     </div>
     <div className="hqps-party-status">
       <div className="hqps-section-title"><div><small>PARTY OVERVIEW</small><h4>Other players’ heroes</h4></div><span>{visibleSheets.filter(s=>s.owner_id!==participantId).length} players</span></div>
-      {visibleSheets.filter(s=>s.owner_id!==participantId).length===0 ? <p className="muted">No other saved character sheets are currently visible.</p> : <div className="hqps-party-list">{visibleSheets.filter(s=>s.owner_id!==participantId).map(sheet=>{const data=sheet.sheet_data||{};const items=Array.isArray(data.inventory)?data.inventory.filter(item=>!item.hidden):[];return <button type="button" className={"hqps-party-card"+(selectedSheetId===sheet.id?" selected":"")} key={sheet.id} onClick={()=>openSheet(sheet)}><b>{data.characterName||sheet.sheet_name||"Unnamed hero"}</b><span className="hqps-party-type">{data.heroType||"Character type not set"}</span><span>Body <strong>{data.bodyCurrent??8}</strong></span><span>Mind <strong>{data.mindCurrent??2}</strong></span><span>Coins <strong>{Number(data.gold||0).toLocaleString()}</strong></span><span>{items.length} inventory {items.length===1?"item":"items"}</span><small className="hqps-party-inventory">{items.length?items.map(item=>item.name+(Number(item.quantity)>1?" ×"+item.quantity:"")).join(" · "):"No inventory items"}</small>{(()=>{const cards=Array.isArray(data.spellCards)?data.spellCards.filter(card=>!card.hidden):[];const legacy=(data.spells||"").trim();return <><span>{cards.length} spell / scroll {cards.length===1?"card":"cards"}</span><small className="hqps-party-spells">{cards.length?cards.map(card=>card.name).join(" · "):legacy||"No spells or scrolls"}</small></>;})()}</button>;})}</div>}
+      {visibleSheets.filter(s=>s.owner_id!==participantId).length===0 ? <p className="muted">No other saved character sheets are currently visible.</p> : <div className="hqps-party-list">{visibleSheets.filter(s=>s.owner_id!==participantId).map(sheet=>{const data=sheet.sheet_data||{};const items=Array.isArray(data.inventory)?data.inventory.filter(item=>!item.hidden&&!item.used):[];return <button type="button" className={"hqps-party-card"+(selectedSheetId===sheet.id?" selected":"")} key={sheet.id} onClick={()=>openSheet(sheet)}><b>{data.characterName||sheet.sheet_name||"Unnamed hero"}</b><span className="hqps-party-type">{data.heroType||"Character type not set"}</span><span>Body <strong>{data.bodyCurrent??8}</strong></span><span>Mind <strong>{data.mindCurrent??2}</strong></span><span>Coins <strong>{Number(data.gold||0).toLocaleString()}</strong></span><span>{items.length} inventory {items.length===1?"item":"items"}</span><small className="hqps-party-inventory">{items.length?items.map(item=>item.name+(Number(item.quantity)>1?" ×"+item.quantity:"")).join(" · "):"No inventory items"}</small>{(()=>{const cards=Array.isArray(data.spellCards)?data.spellCards.filter(card=>!card.hidden&&!card.used):[];const legacy=(data.spells||"").trim();return <><span>{cards.length} spell / scroll {cards.length===1?"card":"cards"}</span><small className="hqps-party-spells">{cards.length?cards.map(card=>card.name).join(" · "):legacy||"No spells or scrolls"}</small></>;})()}</button>;})}</div>}
     </div>
     {loading ? <p className="muted">Loading character sheets…</p> : !selectedSheet ? <div className="hqps-empty"><BookOpen size={26}/><b>No character sheet selected</b><span>Create your first sheet or choose another player's saved sheet.</span><button type="button" className="primary" onClick={createSheet} disabled={working}><Plus size={14}/> Create character sheet</button></div> : <>
       <div className="hqps-sheet-heading">
@@ -364,17 +401,18 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
         </div>
         <div className="hqps-gold-row"><label>Gold coins<input type="number" min="0" value={draft.gold} onChange={e=>updateField("gold",e.target.value)}/><div className="hqps-number-stepper"><button type="button" onClick={()=>updateField("gold",Math.max(0,Number(draft.gold||0)-1))}>−</button><button type="button" onClick={()=>updateField("gold",Number(draft.gold||0)+1)}>+</button></div></label><label>Existing spell / scroll notes<textarea rows="2" value={draft.spells} onChange={e=>updateField("spells",e.target.value)}/></label></div>
         <div className="hqps-detail-launchers">
-          <button type="button" className="hqps-detail-launcher" onClick={()=>{setSpellKind("Spell Card");setActiveDetail("spells");}}><span><b>Spells</b><small>{(draft.spellCards||[]).filter(card=>!card.hidden&&card.category!=="Spell Scroll").length} owned</small></span><ChevronDown size={16}/></button>
-          <button type="button" className="hqps-detail-launcher" onClick={()=>{setSpellKind("Spell Scroll");setActiveDetail("scrolls");}}><span><b>Scrolls</b><small>{(draft.spellCards||[]).filter(card=>!card.hidden&&card.category==="Spell Scroll").length} owned</small></span><ChevronDown size={16}/></button>
-          <button type="button" className="hqps-detail-launcher" onClick={()=>setActiveDetail("inventory")}><span><b>Inventory</b><small>{draft.inventory.filter(item=>!item.hidden).length} items</small></span><ChevronDown size={16}/></button>
+          <button type="button" className="hqps-detail-launcher" onClick={()=>{setSpellKind("Spell Card");setActiveDetail("spells");}}><span><b>Spells</b><small>{(draft.spellCards||[]).filter(card=>!card.hidden&&!card.used&&card.category!=="Spell Scroll").length} owned</small></span><ChevronDown size={16}/></button>
+          <button type="button" className="hqps-detail-launcher" onClick={()=>{setSpellKind("Spell Scroll");setActiveDetail("scrolls");}}><span><b>Scrolls</b><small>{(draft.spellCards||[]).filter(card=>!card.hidden&&!card.used&&card.category==="Spell Scroll").length} owned</small></span><ChevronDown size={16}/></button>
+          <button type="button" className="hqps-detail-launcher" onClick={()=>setActiveDetail("inventory")}><span><b>Inventory</b><small>{draft.inventory.filter(item=>!item.hidden&&!item.used).length} items</small></span><ChevronDown size={16}/></button>
+          {canEdit && <button type="button" className="hqps-detail-launcher" onClick={()=>setActiveDetail("used")}><span><b>Used</b><small>{(draft.usedItems||[]).length} records</small></span><ChevronDown size={16}/></button>}
         </div>
         {activeDetail && <div className="hqps-detail-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setActiveDetail("");}}>
-          <section className="hqps-detail-modal" role="dialog" aria-modal="true" aria-label={activeDetail==="inventory"?"Inventory details":activeDetail==="scrolls"?"Scroll details":"Spell details"}>
-            <div className="hqps-detail-modal-head"><h3>{activeDetail==="inventory"?"Inventory":activeDetail==="scrolls"?"Scrolls":"Spells"}</h3><button type="button" className="icon-action" onClick={()=>setActiveDetail("")} aria-label="Close details"><X size={18}/></button></div>
+          <section className="hqps-detail-modal" role="dialog" aria-modal="true" aria-label={activeDetail==="inventory"?"Inventory details":activeDetail==="used"?"Used items":activeDetail==="scrolls"?"Scroll details":"Spell details"}>
+            <div className="hqps-detail-modal-head"><h3>{activeDetail==="inventory"?"Inventory":activeDetail==="used"?"Used":activeDetail==="scrolls"?"Scrolls":"Spells"}</h3><button type="button" className="icon-action" onClick={()=>setActiveDetail("")} aria-label="Close details"><X size={18}/></button></div>
             <div className="hqps-detail-modal-body">
               {activeDetail==="inventory" ? (
 <div className="hqps-inventory">
-          <div className="hqps-section-title"><div><small>CHARACTER EQUIPMENT</small><h4>Inventory</h4></div><span>{draft.inventory.length} items</span></div>
+          <div className="hqps-section-title"><div><small>CHARACTER EQUIPMENT</small><h4>Inventory</h4></div><span>{draft.inventory.filter(item=>!item.hidden&&!item.used).length} active items</span></div>
           <details className="hqps-add-items">
             <summary><span><Plus size={14}/> Add items</span><small>Browse the catalog or enter a custom item</small></summary>
             <div className="hqps-add-items-content">
@@ -399,26 +437,33 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
               </div>
             </div>
           </details>
-          {draft.inventory.some(item=>!item.hidden) && <div className="hqps-inventory-list">
-            {draft.inventory.map((item,index)=>!item.hidden && <article className="hqps-inventory-item" key={item.id || index}>
+          {draft.inventory.some(item=>!item.hidden&&!item.used) && <div className="hqps-inventory-list">
+            {draft.inventory.map((item,index)=>!item.hidden&&!item.used && <article className="hqps-inventory-item" key={item.id || index}>
               <div className="hqps-inventory-item-top"><div><b>{item.name}</b><span className={item.source==="Base Game"?"hqps-source-base":item.source==="Custom"?"hqps-source-custom":"hqps-source-expansion"}>{item.source || "Custom"}</span></div>{canEdit && <><button type="button" className="quiet" onClick={()=>updateInventory(index,{hidden:!item.hidden})}>{item.hidden?"Restore":"Hide"}</button><button type="button" className="icon-action danger" onClick={()=>updateField("inventory",draft.inventory.filter((_,i)=>i!==index))} title="Remove item"><Trash2 size={14}/></button></>}</div>
               {item.description && <p>{item.description}</p>}
               <div className="hqps-item-fields">
                 <label>Quantity<input type="number" min="1" max="999" value={item.quantity ?? 1} onChange={e=>updateInventory(index,{quantity:e.target.value})}/><div className="hqps-number-stepper"><button type="button" onClick={()=>updateInventory(index,{quantity:Math.max(1,Number(item.quantity??1)-1)})}>−</button><button type="button" onClick={()=>updateInventory(index,{quantity:Math.min(999,Number(item.quantity??1)+1)})}>+</button></div></label>
                 <label>Charges / uses<input type="number" min="0" value={item.charges ?? ""} onChange={e=>updateInventory(index,{charges:e.target.value})} placeholder="Optional"/><div className="hqps-number-stepper"><button type="button" onClick={()=>updateInventory(index,{charges:Math.max(0,Number(item.charges||0)-1)})}>−</button><button type="button" onClick={()=>updateInventory(index,{charges:Number(item.charges||0)+1})}>+</button></div></label>
                 <label className="hqps-equipped"><input type="checkbox" checked={!!item.equipped} onChange={e=>updateInventory(index,{equipped:e.target.checked})}/> Equipped</label>
+                {canEdit && <button type="button" className="primary hqps-use-button" disabled={item.charges!==""&&item.charges!=null&&Number(item.charges)<=0} onClick={()=>useInventoryItem(index)}>{item.charges!==""&&item.charges!=null?"Use (−1 charge)":"Use & Remove"}</button>}
               </div>
             </article>)}
           </div>}
-          {canEdit && draft.inventory.some(item=>item.hidden) && <details className="hqps-hidden-items"><summary>Hidden inventory ({draft.inventory.filter(item=>item.hidden).length})</summary>{draft.inventory.map((item,index)=>item.hidden&&<div key={item.id||index}><span>{item.name}</span><button type="button" className="quiet" onClick={()=>updateInventory(index,{hidden:false})}>Restore</button></div>)}</details>}
+          {canEdit && draft.inventory.some(item=>item.hidden&&!item.used) && <details className="hqps-hidden-items"><summary>Hidden inventory ({draft.inventory.filter(item=>item.hidden&&!item.used).length})</summary>{draft.inventory.map((item,index)=>item.hidden&&!item.used&&<div key={item.id||index}><span>{item.name}</span><button type="button" className="quiet" onClick={()=>updateInventory(index,{hidden:false})}>Restore</button></div>)}</details>}
         </div>
+              
+              ) : activeDetail==="used" ? (
+                <div className="hqps-used-items">
+                  <div className="hqps-section-title"><div><small>ITEM HISTORY</small><h4>Used items, spells & scrolls</h4></div><span>{(draft.usedItems||[]).length} uses</span></div>
+                  {(draft.usedItems||[]).length ? <div className="hqps-used-list">{[...(draft.usedItems||[])].reverse().map((entry,index)=><article key={entry.id||index}><div><b>{entry.name}</b><small>{entry.kind}{entry.source?" · "+entry.source:""}{entry.details?" · "+entry.details:""}</small></div><time>{entry.usedAt?new Date(entry.usedAt).toLocaleString():"Used"}</time></article>)}</div> : <p className="muted">Nothing has been used yet. Used inventory, spells, and scrolls will be recorded here.</p>}
+                </div>
               ) : (
-<div className="hqps-spell-cards"><div className="hqps-section-title"><div><small>MAGIC & SCROLLS</small><h4>Spell cards & scrolls</h4></div><span>{(draft.spellCards||[]).filter(card=>!card.hidden).length} active</span></div>
+<div className="hqps-spell-cards"><div className="hqps-section-title"><div><small>MAGIC & SCROLLS</small><h4>Spell cards & scrolls</h4></div><span>{(draft.spellCards||[]).filter(card=>!card.hidden&&!card.used).length} active</span></div>
           <div className="hqps-catalog-controls"><label className="hqps-search"><Search size={15}/><input value={spellSearch} onChange={e=>setSpellSearch(e.target.value)} placeholder={"Search "+(spellKind==="Spell Scroll"?"scrolls":"spells")+"..."}/></label><select value={spellSource} onChange={e=>setSpellSource(e.target.value)}><option>All sources</option><option>Base Game</option>{EXPANSIONS.map(source=><option key={source}>{source}</option>)}</select></div>
-          <div className="hqps-spell-catalog">{spellCatalog.filter(card=>card.category===spellKind).map(card=><button type="button" key={card.source+"-"+card.name} className="hqps-spell-catalog-item" disabled={!canEdit} onClick={()=>{const current=draft.spellCards||[];if(!current.some(x=>x.name===card.name&&x.source===card.source))updateField("spellCards",[...current,{...card,id:crypto.randomUUID(),hidden:false,custom:false}]);}}><span><b>{card.name}</b><small>{card.category}</small></span><span className={card.source==="Base Game"?"hqps-source-base":"hqps-source-expansion"}>{card.source}</span><Plus size={14}/></button>)}</div>
+          <div className="hqps-spell-catalog">{spellCatalog.filter(card=>card.category===spellKind).map(card=><button type="button" key={card.source+"-"+card.name} className="hqps-spell-catalog-item" disabled={!canEdit} onClick={()=>{const current=draft.spellCards||[];if(!current.some(x=>!x.used&&x.name===card.name&&x.source===card.source))updateField("spellCards",[...current,{...card,id:crypto.randomUUID(),hidden:false,custom:false}]);}}><span><b>{card.name}</b><small>{card.category}</small></span><span className={card.source==="Base Game"?"hqps-source-base":"hqps-source-expansion"}>{card.source}</span><Plus size={14}/></button>)}</div>
           <div className="hqps-custom-spell"><input value={customSpellName} onChange={e=>setCustomSpellName(e.target.value)} placeholder="Enter custom or missing spell / scroll"/><button type="button" className="secondary" disabled={!canEdit||!customSpellName.trim()} onClick={()=>{updateField("spellCards",[...(draft.spellCards||[]),{id:crypto.randomUUID(),name:customSpellName.trim(),source:"Custom",category:"Custom spell",custom:true,hidden:false}]);setCustomSpellName("");}}>Add custom card</button></div>
           <label className="hqps-show-hidden"><input type="checkbox" checked={showHiddenSpells} onChange={e=>setShowHiddenSpells(e.target.checked)}/> Show hidden cards</label>
-          <div className="hqps-spell-owned">{(draft.spellCards||[]).filter(card=>(card.category==="Spell Scroll"?"Spell Scroll":"Spell Card")===spellKind&&(showHiddenSpells||!card.hidden)).map((card,index)=><div className={"hqps-spell-owned-card"+(card.hidden?" hidden":"")} key={card.id||index}><span><b>{card.name}</b><small>{card.source||"Custom"}</small></span>{canEdit&&<button type="button" className="quiet" onClick={()=>updateField("spellCards",(draft.spellCards||[]).map(item=>item.id===card.id?{...item,hidden:!item.hidden}:item))}>{card.hidden?"Restore":"Hide"}</button>}</div>)}</div>
+          <div className="hqps-spell-owned">{(draft.spellCards||[]).filter(card=>(card.category==="Spell Scroll"?"Spell Scroll":"Spell Card")===spellKind&&(showHiddenSpells||!card.hidden)&&!card.used).map((card,index)=><div className={"hqps-spell-owned-card"+(card.hidden?" hidden":"")} key={card.id||index}><span><b>{card.name}</b><small>{card.source||"Custom"}</small></span>{canEdit&&<>{!card.hidden&&<button type="button" className="primary hqps-use-button" onClick={()=>useSpellCard((draft.spellCards||[]).indexOf(card))}>Use & Move to Used</button>}<button type="button" className="quiet" onClick={()=>updateField("spellCards",(draft.spellCards||[]).map(item=>item.id===card.id?{...item,hidden:!item.hidden}:item))}>{card.hidden?"Restore":"Hide"}</button></>}</div>)}</div>
         </div>
               )}
             </div>

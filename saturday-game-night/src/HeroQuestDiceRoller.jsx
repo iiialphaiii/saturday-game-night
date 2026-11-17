@@ -1,9 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Dices, Shield, Skull } from "lucide-react";
 import "./player-sheets.css";
 
-export default function HeroQuestDiceRoller() {
-  const [expanded,setExpanded] = useState(false);
+export default function HeroQuestDiceRoller({ participantId }) {
+  const storageKey = "hq-combat-dice-expanded-" + (participantId || "guest");
+  const [expanded,setExpanded] = useState(() => { try { return window.localStorage.getItem(storageKey) === "true"; } catch { return false; } });
+  useEffect(() => { try { window.localStorage.setItem(storageKey, String(expanded)); } catch {} }, [storageKey, expanded]);
   const [diceCount,setDiceCount] = useState("6");
   const [results,setResults] = useState([]);
   const [message,setMessage] = useState("");
