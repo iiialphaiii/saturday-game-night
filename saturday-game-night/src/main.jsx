@@ -136,11 +136,22 @@ function App() {
   const [toolsMode,setToolsMode] = useState("regular");
   const [heroQuestSection,setHeroQuestSection] = useState("sheets");
   const [regularDiceExpanded,setRegularDiceExpanded] = useState(true);
+  const [hqRegularDiceExpanded,setHqRegularDiceExpanded] = useState(false);
   const [diceGroups, setDiceGroups] = useState([{ id: 1, count: "2", sides: "20" }]);
   const [nextDiceGroupId, setNextDiceGroupId] = useState(2);
   const [createdDice, setCreatedDice] = useState([]);
   const [diceResults, setDiceResults] = useState([]);
   const [diceToolMessage, setDiceToolMessage] = useState("");
+
+  useEffect(() => {
+    if (!participantId) return;
+    try { setHqRegularDiceExpanded(window.localStorage.getItem("hq-regular-dice-expanded-" + participantId) === "true"); } catch {}
+  }, [participantId]);
+
+  useEffect(() => {
+    if (!participantId) return;
+    try { window.localStorage.setItem("hq-regular-dice-expanded-" + participantId, String(hqRegularDiceExpanded)); } catch {}
+  }, [participantId, hqRegularDiceExpanded]);
 
   const isAdmin = session?.user?.app_metadata?.role === "admin";
   const isGameAdmin = session?.user?.app_metadata?.role === "game_admin";
@@ -1108,15 +1119,11 @@ function App() {
         <button type="button" role="tab" aria-selected={toolsMode==="regular"} className={toolsMode==="regular"?"active":""} onClick={()=>setToolsMode("regular")}><Dices size={15}/> Regular Dice</button>
         <button type="button" role="tab" aria-selected={toolsMode==="heroquest"} className={toolsMode==="heroquest"?"active":""} onClick={()=>setToolsMode("heroquest")}><BookOpen size={15}/> HeroQuest</button>
       </div>
-      {toolsMode==="heroquest" && <nav className="hq-tools-sub-tabs" aria-label="HeroQuest tools">
-        <button type="button" className={heroQuestSection==="regular"?"active":""} onClick={()=>setHeroQuestSection("regular")}>Regular Dice</button>
-        <button type="button" className={heroQuestSection==="combat"?"active":""} onClick={()=>setHeroQuestSection("combat")}>HeroQuest Dice</button>
-        <button type="button" className={heroQuestSection==="sheets"?"active":""} onClick={()=>setHeroQuestSection("sheets")}>Character Sheets</button>
-      </nav>}
-      {(toolsMode==="regular" || (toolsMode==="heroquest" && heroQuestSection==="regular")) && <section className="panel game-tools-panel">
+      {toolsMode==="heroquest" && <div className="hq-tools-stack">
+      {(toolsMode==="regular" || toolsMode==="heroquest") && <section className="panel game-tools-panel">
         <div className="panel-title"><div><small>{toolsMode==="heroquest"?"HEROQUEST · GENERAL PURPOSE":"GENERAL PURPOSE"}</small><h2>Regular Dice Roller</h2></div><span className="tile"><Dices size={18}/></span></div>
-        <button type="button" className="secondary hq-collapse-toggle" aria-expanded={regularDiceExpanded} onClick={()=>setRegularDiceExpanded(v=>!v)}>{regularDiceExpanded?"Hide dice controls":"Show dice controls"}</button>
-        {regularDiceExpanded && <>
+        <button type="button" className="secondary hq-collapse-toggle" aria-expanded={toolsMode==="heroquest"?hqRegularDiceExpanded:regularDiceExpanded} onClick={()=>toolsMode==="heroquest"?setHqRegularDiceExpanded(v=>!v):setRegularDiceExpanded(v=>!v)}>{(toolsMode==="heroquest"?hqRegularDiceExpanded:regularDiceExpanded)?"Hide dice controls":"Show dice controls"}</button>
+        {(toolsMode==="heroquest"?hqRegularDiceExpanded:regularDiceExpanded) && <>
         <p className="muted">Use this independent dice roller for any game.</p>
         <div className="dice-group-list">
           {diceGroups.map((group,index)=><div className="dice-group-row" key={group.id}>
@@ -1139,8 +1146,35 @@ function App() {
         </div>}
         </>}
       </section>}
-      {toolsMode==="heroquest" && heroQuestSection==="combat" && <HeroQuestDiceRoller/>}
-      {toolsMode==="heroquest" && heroQuestSection==="sheets" && <HeroQuestPlayerSheets db={db} participantId={participantId} participantName={name}/>}
+        <HeroQuestDiceRoller participantId={participantId}/>
+        <HeroQuestPlayerSheets db={db} participantId={participantId} participantName={name}/>
+      </div>}
+      {toolsMode==="regular" && (toolsMode==="regular" || toolsMode==="heroquest") && <section className="panel game-tools-panel">
+        <div className="panel-title"><div><small>{toolsMode==="heroquest"?"HEROQUEST · GENERAL PURPOSE":"GENERAL PURPOSE"}</small><h2>Regular Dice Roller</h2></div><span className="tile"><Dices size={18}/></span></div>
+        <button type="button" className="secondary hq-collapse-toggle" aria-expanded={toolsMode==="heroquest"?hqRegularDiceExpanded:regularDiceExpanded} onClick={()=>toolsMode==="heroquest"?setHqRegularDiceExpanded(v=>!v):setRegularDiceExpanded(v=>!v)}>{(toolsMode==="heroquest"?hqRegularDiceExpanded:regularDiceExpanded)?"Hide dice controls":"Show dice controls"}</button>
+        {(toolsMode==="heroquest"?hqRegularDiceExpanded:regularDiceExpanded) && <>
+        <p className="muted">Use this independent dice roller for any game.</p>
+        <div className="dice-group-list">
+          {diceGroups.map((group,index)=><div className="dice-group-row" key={group.id}>
+            <div className="dice-group-heading"><strong>Dice group {index+1}</strong><button type="button" className="quiet dice-remove" disabled={diceGroups.length===1} onClick={()=>{setDiceGroups(groups=>groups.filter(item=>item.id!==group.id));setCreatedDice(dice=>dice.filter(die=>die.groupId!==group.id));setDiceResults(results=>results.filter(result=>result.groupId!==group.id));setDiceToolMessage("Dice group removed.");}}><X size={14}/> Remove group</button></div>
+            <label>How many dice?<input type="number" min="1" max="100" value={group.count} onChange={e=>{setDiceGroups(groups=>groups.map(item=>item.id===group.id?{...item,count:e.target.value}:item));setCreatedDice([]);setDiceResults([]);}} /><span className="hqps-number-stepper"><button type="button" onClick={()=>setDiceGroups(groups=>groups.map(item=>item.id===group.id?{...item,count:String(Math.max(1,Number(item.count||1)-1))}:item))}>−</button><button type="button" onClick={()=>setDiceGroups(groups=>groups.map(item=>item.id===group.id?{...item,count:String(Math.min(100,Number(item.count||1)+1))}:item))}>+</button></span></label>
+            <label>How many sides per die?<input type="number" min="2" max="1000" value={group.sides} onChange={e=>{setDiceGroups(groups=>groups.map(item=>item.id===group.id?{...item,sides:e.target.value}:item));setCreatedDice([]);setDiceResults([]);}} /><span className="hqps-number-stepper"><button type="button" onClick={()=>setDiceGroups(groups=>groups.map(item=>item.id===group.id?{...item,sides:String(Math.max(2,Number(item.sides||2)-1))}:item))}>−</button><button type="button" onClick={()=>setDiceGroups(groups=>groups.map(item=>item.id===group.id?{...item,sides:String(Math.min(1000,Number(item.sides||2)+1))}:item))}>+</button></span></label>
+          </div>)}
+        </div>
+        <div className="dice-setup-actions">
+          <button type="button" className="secondary" onClick={()=>{setDiceGroups(groups=>[...groups,{id:nextDiceGroupId,count:"1",sides:"6"}]);setNextDiceGroupId(id=>id+1);setCreatedDice([]);setDiceResults([]);setDiceToolMessage("");}}><Plus size={14}/> Add dice group</button>
+          <button type="button" className="primary" onClick={createDiceSet}><Dices size={14}/> Create dice</button>
+          <button type="button" className="secondary" onClick={()=>{setDiceGroups([{id:1,count:"2",sides:"20"}]);setNextDiceGroupId(2);setCreatedDice([]);setDiceResults([]);setDiceToolMessage("Dice setup reset.");}}>Reset</button>
+        </div>
+        {diceToolMessage && <p className="dice-tool-message" role="status">{diceToolMessage}</p>}
+        {createdDice.length>0 && <div className="dice-results-area">
+          <div className="dice-results-heading"><div><small>YOUR DICE</small><h3>{createdDice.length} dice ready</h3></div><button type="button" className="quiet" onClick={()=>{setCreatedDice([]);setDiceResults([]);setDiceToolMessage("All dice removed.");}}><X size={14}/> Remove all</button></div>
+          <div className="dice-groups-results">{diceGroups.map((group,groupIndex)=>{const groupDice=createdDice.filter(die=>die.groupId===group.id);const groupResults=groupDice.map(die=>diceResults.find(result=>result.id===die.id)).filter(Boolean);const groupTotal=groupResults.reduce((sum,result)=>sum+result.result,0);return <section className="dice-group-results" key={group.id}><div className="dice-group-results-heading"><div><b>Dice group {groupIndex+1}</b><small>{groupDice.length} {groupDice.length===1?"die":"dice"} · 1–{group.sides}</small></div><div className="dice-group-total"><small>GROUP TOTAL</small><strong>{groupResults.length?groupTotal:"—"}</strong></div></div><div className="dice-result-list">{groupDice.map((die,index)=>{const rolled=diceResults.find(result=>result.id===die.id);return <div className={"dice-result-card"+(rolled?" rolled":"")} key={die.id}><span>Die {index+1}</span><strong>{rolled?rolled.result:"—"}</strong><small>1–{die.sides}</small><button type="button" className="dice-single-remove" title="Remove this die" aria-label={"Remove die from group "+(groupIndex+1)} onClick={()=>removeDie(die.id)}><X size={13}/></button></div>;})}</div><button type="button" className="secondary dice-roll-group-button" disabled={!groupDice.length} onClick={()=>rollDice(group.id)}><Dices size={14}/> Roll group {groupIndex+1}</button></section>;})}</div>
+          <div className="dice-grand-total"><div><small>ALL GROUPS TOTAL</small><strong>{diceResults.length?diceResults.reduce((sum,result)=>sum+result.result,0):"—"}</strong></div><span>{diceResults.length} of {createdDice.length} dice rolled</span></div>
+          <button type="button" className="primary dice-roll-button" disabled={!createdDice.length} onClick={()=>rollDice()}><Dices size={16}/> Roll All</button>
+        </div>}
+        </>}
+      </section>}
       </>}{activeTab === "attendance" && <>
       <section className="panel attendance-panel"><div className="panel-title"><div><small>THIS GAME NIGHT</small><h2>Attendance</h2></div><span className="tile"><Users size={18}/></span></div><p className="muted">Let everyone know whether you are joining this date.</p><div className="attendance-actions">{[["going","Going"],["maybe","Maybe"],["not_going","Not Going"]].map(([value,label]) => <button key={value} className={"secondary"+(myAttendance===value?" selected":"")} disabled={busy||settings?.is_archived} onClick={() => setEventAttendance(value)}>{myAttendance===value?"✓ ":""}{label}</button>)}</div>{(myAttendance==="going"||myAttendance==="maybe") && <form className="arrival-update" onSubmit={join}><label>Update your arrival time<ArrivalTimePicker value={arrivalTime} onChange={setArrivalTime}/><small>{arrivalTime ? "Current saved time: " + formatTime(arrivalTime) : "Please select a time."}</small></label><button className="secondary" disabled={busy||settings?.is_archived}>Save arrival time</button></form>}<div className="attendance-summary"><span><b>{goingCount}</b> Going</span><span><b>{maybeCount}</b> Maybe</span><span><b>{notGoingCount}</b> Not Going</span></div><div className="attendance-list">{attendance.map(item => <span key={item.id}>{participants.find(p=>p.id===item.participant_id)?.name||"Participant"} · {item.status==="not_going"?"Not Going":item.status[0].toUpperCase()+item.status.slice(1)}</span>)}</div>{canManageAttendance && <div className="admin-section attendance-admin-section"><h3><Shield size={16}/> Manage participant attendance</h3><p className="muted">Administrators and Game Admins can update each participant’s RSVP and arrival time for this Game Night.</p>{participants.filter(person=>person.is_active!==false).map(person=>{const savedStatus=attendance.find(row=>row.participant_id===person.id)?.status||"";const savedArrival=eventArrivals.find(row=>row.participant_id===person.id)?.arrival_time;const draft=attendanceDrafts[person.id]||{};const status=draft.status??savedStatus;const time=draft.arrivalTime??toInputTime(savedArrival);return <div className="request-row attendance-admin-row" key={person.id}><div className="attendance-admin-person"><b>{person.name}</b><select aria-label={"Attendance status for "+person.name} value={status} onChange={e=>setAttendanceDrafts(v=>({...v,[person.id]:{...v[person.id],status:e.target.value}}))}><option value="">No response</option><option value="going">Going</option><option value="maybe">Maybe</option><option value="not_going">Not Going</option></select>{(status==="going"||status==="maybe")&&<ArrivalTimePicker value={time} onChange={value=>setAttendanceDrafts(v=>({...v,[person.id]:{...v[person.id],arrivalTime:value}}))}/>}</div><div className="attendance-admin-actions"><button className="secondary" disabled={busy||settings?.is_archived||!status||((status==="going"||status==="maybe")&&!time)} onClick={()=>saveParticipantAttendance(person)}>Save</button>{eventArrivals.find(row=>row.participant_id===person.id)?.checked_in_at ? <><label className="check-in-edit">Check-in time<input aria-label={"Edit check-in time for "+person.name} type="datetime-local" value={toLocalDateTimeInput(eventArrivals.find(row=>row.participant_id===person.id)?.checked_in_at)} disabled={busy||settings?.is_archived} onChange={e=>updateCheckInTime(person,e.target.value)}/></label><button className="secondary check-in-clear" disabled={busy||settings?.is_archived} onClick={()=>clearCheckIn(person)}>Clear check-in</button></> : <button className="primary check-in-button" disabled={busy||settings?.is_archived} onClick={()=>checkInParticipant(person)}><UserCheck size={13}/> Check in</button>}</div></div>;})}</div>}</section>
       <section className="stats">
