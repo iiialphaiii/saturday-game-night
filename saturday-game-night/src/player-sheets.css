@@ -32,3 +32,27 @@
 .hqps-detail-modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 17px;border-bottom:1px solid var(--line)}.hqps-detail-modal-head h3{margin:0;font-size:18px}
 .hqps-detail-modal-body{padding:14px 17px 18px;overflow:auto}.hqps-detail-modal-body .hqps-spell-cards,.hqps-detail-modal-body .hqps-inventory{margin:0;padding:0;border:0}.hqps-detail-modal-body .hqps-section-title{margin-bottom:12px}
 @media(max-width:520px){.hqps-detail-launchers{grid-template-columns:1fr}.hqps-detail-launcher{padding:11px}.hqps-detail-modal{max-height:90vh}.hqps-detail-modal-body{padding:12px}}
+
+
+/* Ensure HeroQuest inventory, spell, and scroll dialogs are fully opaque. */
+.hqps-detail-backdrop{
+  background:rgba(5,6,12,.82);
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+}
+.hqps-detail-modal{
+  background:#141620 !important;
+  opacity:1 !important;
+  isolation:isolate;
+}
+.hqps-detail-modal-head{
+  position:relative;
+  z-index:1;
+  flex:none;
+  background:#141620 !important;
+  opacity:1 !important;
+}
+.hqps-detail-modal-body{
+  background:#141620 !important;
+  opacity:1 !important;
+}
