@@ -92,6 +92,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
   const [sheets,setSheets] = useState([]);
   const [selectedSheetId,setSelectedSheetId] = useState("");
   const [sheetName,setSheetName] = useState("");
+  const [goldAmount,setGoldAmount] = useState("");
   const [draft,setDraft] = useState(blankCharacter);
   const [hideOthers,setHideOthers] = useState(false);
   const [canAdminEdit,setCanAdminEdit] = useState(false);
@@ -124,10 +125,14 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
   const selectedSheet = sheets.find(sheet => sheet.id === selectedSheetId) || null;
   const isOwner = !!selectedSheet && selectedSheet.owner_id === participantId;
   const canEdit = !!selectedSheet && (isOwner || (canAdminEdit && adminEditMode));
+  const canManageSelected = !!selectedSheet && (isOwner || canAdminEdit);
   const visibleSheets = useMemo(() => sheets.filter(sheet =>
-    (sheet.owner_id === participantId || hasSheetInformation(sheet)) &&
+    (sheet.owner_id === participantId || sheet.is_active === true || canAdminEdit) &&
     (!hideOthers || sheet.owner_id === participantId)
-  ), [sheets,hideOthers,participantId]);
+  ), [sheets,hideOthers,participantId,canAdminEdit]);
+  const partySheets = useMemo(() => visibleSheets.filter(sheet =>
+    sheet.owner_id !== participantId && sheet.is_active === true
+  ), [visibleSheets,participantId]);
   const spellCatalog = useMemo(() => {
     const baseSpells = ["Ball of Flame","Courage","Fire of Wrath","Genie","Heal Body","Pass Through Rock","Rock Skin","Sleep","Swift Wind","Tempest","Veil of Mist","Water of Healing"].map(name=>({name,source:"Base Game",category:"Spell Card"}));
     const expansionScrolls = ITEM_CATALOG.filter(item=>/^Spell Scroll:/i.test(item.name)).map(item=>({name:item.name.replace(/^Spell Scroll:\s*/i,""),source:item.source,category:"Spell Scroll"}));
@@ -143,7 +148,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
   async function loadSheets() {
     if (!db || !participantId) return;
     const {data,error} = await db.from("player_sheets")
-      .select("id,owner_id,sheet_name,sheet_data,created_at,updated_at,owner:participants!player_sheets_owner_id_fkey(name)")
+      .select("id,owner_id,sheet_name,sheet_data,is_active,created_at,updated_at,owner:participants!player_sheets_owner_id_fkey(name)")
       .order("updated_at",{ascending:false});
     if (error) { setMessage("Unable to load player sheets: "+error.message); setLoading(false); return []; }
     setSheets(data || []);
@@ -169,7 +174,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
         setCanAdminEdit(!error && data === true);
         const rows = await loadSheets();
         if (active && rows?.length) {
-          const own = rows.find(sheet => sheet.owner_id === participantId) || rows.find(hasSheetInformation);
+          const own = rows.find(sheet => sheet.owner_id === participantId) || rows.find(sheet => sheet.is_active === true);
           if (own) openSheet(own);
         }
       }
@@ -190,6 +195,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     const current = sheets.find(sheet => sheet.id === selectedSheetId);
     if (!current) return;
     setSheetName(current.sheet_name || "My HeroQuest Character");
+    setGoldAmount("");
     setDraft({...blankCharacter(),...(current.sheet_data || {}),inventory:Array.isArray(current.sheet_data?.inventory)?current.sheet_data.inventory:[]});
     setSavedAt(current.updated_at || current.created_at);
     setSaveStatus("saved");
@@ -206,6 +212,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     }
     setSelectedSheetId(sheet.id);
     setSheetName(sheet.sheet_name || "My HeroQuest Character");
+    setGoldAmount("");
     setDraft({...blankCharacter(),...(sheet.sheet_data || {}),inventory:Array.isArray(sheet.sheet_data?.inventory)?sheet.sheet_data.inventory:[]});
     setSavedAt(sheet.updated_at || sheet.created_at);
     setSaveStatus("saved");
@@ -233,7 +240,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       owner_id:participantId,
       sheet_name:"My HeroQuest Character",
       sheet_data:initial
-    }).select("id,owner_id,sheet_name,sheet_data,created_at,updated_at,owner:participants!player_sheets_owner_id_fkey(name)").single();
+    }).select("id,owner_id,sheet_name,sheet_data,is_active,created_at,updated_at,owner:participants!player_sheets_owner_id_fkey(name)").single();
     if (error) {
       setSaveStatus("failed"); setMessage("Could not create sheet: "+error.message); setWorking(false); return;
     }
@@ -255,7 +262,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     setMessage("");
     const payload = {sheet_name:sheetName.trim() || "My HeroQuest Character",sheet_data:draft};
     const {data,error} = await db.from("player_sheets").update(payload).eq("id",selectedSheet.id)
-      .select("id,owner_id,sheet_name,sheet_data,created_at,updated_at,owner:participants!player_sheets_owner_id_fkey(name)").single();
+      .select("id,owner_id,sheet_name,sheet_data,is_active,created_at,updated_at,owner:participants!player_sheets_owner_id_fkey(name)").single();
     if (error) {
       setSaveStatus("failed");
       setMessage("Save failed. Your changes are still here; please retry. "+error.message);
@@ -343,15 +350,60 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     setMessage("Custom item added to inventory.");
   }
 
+  async function setActiveCharacter() {
+    if (!selectedSheet || !isOwner || working) return;
+    setWorking(true);
+    setMessage("");
+    const {error} = await db.rpc("set_active_player_sheet",{p_sheet_id:selectedSheet.id});
+    if (error) {
+      setMessage("Could not set active character: "+error.message);
+      setWorking(false);
+      return;
+    }
+    await loadSheets();
+    setMessage("This is now your active character. Your previous active character is no longer public.");
+    setWorking(false);
+  }
+
+  function confirmGoldChange(direction) {
+    if (!canEdit || working) return;
+    const amount = Number(goldAmount);
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      setMessage("Enter a whole-number gold amount greater than zero.");
+      return;
+    }
+    const balance = Math.max(0,Number(draft.gold || 0));
+    const nextBalance = direction === "add" ? balance + amount : Math.max(0,balance - amount);
+    if (!Number.isSafeInteger(nextBalance)) {
+      setMessage("That gold amount is too large.");
+      return;
+    }
+    const isShort = direction === "subtract" && amount > balance;
+    const action = direction === "add" ? "adding" : "subtracting";
+    const resultText = isShort
+      ? "The amount exceeds the current balance, so the balance will become 0."
+      : "The new balance will be "+nextBalance.toLocaleString()+" gold.";
+    if (!window.confirm("Confirm "+action+" "+amount.toLocaleString()+" gold? Current balance: "+balance.toLocaleString()+". "+resultText)) return;
+    if (!window.confirm("FINAL CONFIRMATION: "+(direction === "add" ? "ADD " : "SUBTRACT ")+amount.toLocaleString()+" gold? "+(isShort?"The balance will be set to 0.":"New balance: "+nextBalance.toLocaleString()+" gold."))) return;
+    updateField("gold",nextBalance);
+    setGoldAmount("");
+    setMessage(isShort
+      ? amount.toLocaleString()+" gold subtracted. The balance was below zero, so it has been set to 0."
+      : amount.toLocaleString()+" gold "+(direction === "add" ? "added." : "subtracted.")+" New balance: "+nextBalance.toLocaleString()+".");
+  }
+
   async function deleteSheet() {
-    if (!selectedSheet || !isOwner) return;
-    if (!window.confirm("Delete "+selectedSheet.sheet_name+"? This cannot be undone.")) return;
+    if (!selectedSheet || !canManageSelected || working) return;
+    const characterLabel = selectedSheet.sheet_data?.characterName || selectedSheet.sheet_name || "this character";
+    const promptLabel = isOwner ? "your character" : "this player's character";
+    if (!window.confirm("Delete "+promptLabel+" (“"+characterLabel+"”)? This cannot be undone.")) return;
+    if (!window.confirm("FINAL CONFIRMATION: Permanently delete “"+characterLabel+"”? This character sheet and its saved details will be removed.")) return;
     setWorking(true);
     const {error} = await db.from("player_sheets").delete().eq("id",selectedSheet.id);
     if (error) { setMessage("Could not delete sheet: "+error.message); setWorking(false); return; }
     const remaining = sheets.filter(sheet=>sheet.id!==selectedSheet.id);
     setSheets(remaining); setSelectedSheetId(""); setDraft(blankCharacter()); setSheetName(""); setAudit([]);
-    setMessage("Sheet deleted."); setWorking(false);
+    setMessage("Character deleted."); setWorking(false);
   }
 
   const statusText = saveStatus === "saving" ? "Saving…" : saveStatus === "unsaved" ? "Unsaved changes" : saveStatus === "failed" ? "Save failed" : "Saved";
@@ -372,8 +424,8 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       <button type="button" className="quiet" onClick={loadSheets} title="Refresh sheets"><RefreshCw size={14}/></button>
     </div>
     <div className="hqps-party-status">
-      <div className="hqps-section-title"><div><small>PARTY OVERVIEW</small><h4>Other players’ heroes</h4></div><span>{visibleSheets.filter(s=>s.owner_id!==participantId).length} players</span></div>
-      {visibleSheets.filter(s=>s.owner_id!==participantId).length===0 ? <p className="muted">No other saved character sheets are currently visible.</p> : <div className="hqps-party-list">{visibleSheets.filter(s=>s.owner_id!==participantId).map(sheet=>{const data=sheet.sheet_data||{};const items=Array.isArray(data.inventory)?data.inventory.filter(item=>!item.hidden&&!item.used):[];return <button type="button" className={"hqps-party-card"+(selectedSheetId===sheet.id?" selected":"")} key={sheet.id} onClick={()=>openSheet(sheet)}><b>{data.characterName||sheet.sheet_name||"Unnamed hero"}</b><span className="hqps-party-type">{data.heroType||"Character type not set"}</span><span>Body <strong>{data.bodyCurrent??8}</strong></span><span>Mind <strong>{data.mindCurrent??2}</strong></span><span>Coins <strong>{Number(data.gold||0).toLocaleString()}</strong></span><span>{items.length} inventory {items.length===1?"item":"items"}</span><small className="hqps-party-inventory">{items.length?items.map(item=>item.name+(Number(item.quantity)>1?" ×"+item.quantity:"")).join(" · "):"No inventory items"}</small>{(()=>{const cards=Array.isArray(data.spellCards)?data.spellCards.filter(card=>!card.hidden&&!card.used):[];const legacy=(data.spells||"").trim();return <><span>{cards.length} spell / scroll {cards.length===1?"card":"cards"}</span><small className="hqps-party-spells">{cards.length?cards.map(card=>card.name).join(" · "):legacy||"No spells or scrolls"}</small></>;})()}</button>;})}</div>}
+      <div className="hqps-section-title"><div><small>PARTY OVERVIEW</small><h4>Other players’ heroes</h4></div><span>{partySheets.length} players</span></div>
+      {partySheets.length===0 ? <p className="muted">No other saved character sheets are currently visible.</p> : <div className="hqps-party-list">{partySheets.map(sheet=>{const data=sheet.sheet_data||{};const items=Array.isArray(data.inventory)?data.inventory.filter(item=>!item.hidden&&!item.used):[];return <button type="button" className={"hqps-party-card"+(selectedSheetId===sheet.id?" selected":"")} key={sheet.id} onClick={()=>openSheet(sheet)}><b>{data.characterName||sheet.sheet_name||"Unnamed hero"}</b><span className="hqps-party-type">{data.heroType||"Character type not set"}</span><span>Body <strong>{data.bodyCurrent??8}</strong></span><span>Mind <strong>{data.mindCurrent??2}</strong></span><span>Coins <strong>{Number(data.gold||0).toLocaleString()}</strong></span><span>{items.length} inventory {items.length===1?"item":"items"}</span><small className="hqps-party-inventory">{items.length?items.map(item=>item.name+(Number(item.quantity)>1?" ×"+item.quantity:"")).join(" · "):"No inventory items"}</small>{(()=>{const cards=Array.isArray(data.spellCards)?data.spellCards.filter(card=>!card.hidden&&!card.used):[];const legacy=(data.spells||"").trim();return <><span>{cards.length} spell / scroll {cards.length===1?"card":"cards"}</span><small className="hqps-party-spells">{cards.length?cards.map(card=>card.name).join(" · "):legacy||"No spells or scrolls"}</small></>;})()}</button>;})}</div>}
     </div>
     {loading ? <p className="muted">Loading character sheets…</p> : !selectedSheet ? <div className="hqps-empty"><BookOpen size={26}/><b>No character sheet selected</b><span>Create your first sheet or choose another player's saved sheet.</span><button type="button" className="primary" onClick={createSheet} disabled={working}><Plus size={14}/> Create character sheet</button></div> : <>
       <div className="hqps-sheet-heading">
@@ -383,6 +435,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       <div className="hqps-meta">
         <span>Created {formatSavedAt(selectedSheet.created_at)}</span>
         <span>Last saved {formatSavedAt(savedAt || selectedSheet.updated_at)}</span>
+        {selectedSheet.is_active && <span className="hqps-active-pill">Active character · visible to players</span>}
       </div>
       {!isOwner && canAdminEdit && <div className="hqps-admin-edit">
         <span><ShieldCheck size={15}/> Admin / Game Admin access</span>
@@ -399,7 +452,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
           <div className="hqps-stat-card"><b>Mind Points</b><div><label>Current<input type="number" min="0" max="99" value={draft.mindCurrent} onChange={e=>updateField("mindCurrent",e.target.value)}/></label><div className="hqps-number-stepper"><button type="button" onClick={()=>updateField("mindCurrent",Math.max(0,Number(draft.mindCurrent||0)-1))}>−</button><button type="button" onClick={()=>updateField("mindCurrent",Math.min(99,Number(draft.mindCurrent||0)+1))}>+</button></div></div></div>
           <div className="hqps-stat-card"><b>Combat Dice</b><div><label>Attack<input type="number" min="0" max="20" value={draft.attackDice} onChange={e=>updateField("attackDice",e.target.value)}/></label><div className="hqps-number-stepper"><button type="button" onClick={()=>updateField("attackDice",Math.max(0,Number(draft.attackDice||0)-1))}>−</button><button type="button" onClick={()=>updateField("attackDice",Math.min(20,Number(draft.attackDice||0)+1))}>+</button></div><label>Defend<input type="number" min="0" max="20" value={draft.defendDice} onChange={e=>updateField("defendDice",e.target.value)}/></label><div className="hqps-number-stepper"><button type="button" onClick={()=>updateField("defendDice",Math.max(0,Number(draft.defendDice||0)-1))}>−</button><button type="button" onClick={()=>updateField("defendDice",Math.min(20,Number(draft.defendDice||0)+1))}>+</button></div></div></div>
         </div>
-        <div className="hqps-gold-row"><label>Gold coins<input type="number" min="0" value={draft.gold} onChange={e=>updateField("gold",e.target.value)}/><div className="hqps-number-stepper"><button type="button" onClick={()=>updateField("gold",Math.max(0,Number(draft.gold||0)-1))}>−</button><button type="button" onClick={()=>updateField("gold",Number(draft.gold||0)+1)}>+</button></div></label><label>Existing spell / scroll notes<textarea rows="2" value={draft.spells} onChange={e=>updateField("spells",e.target.value)}/></label></div>
+        <div className="hqps-gold-row"><div className="hqps-gold-control"><div className="hqps-gold-balance"><span>Gold Balance</span><strong>{Number(draft.gold||0).toLocaleString()}</strong></div><label className="hqps-gold-amount">Amount to add or subtract<input type="number" min="1" step="1" value={goldAmount} onChange={e=>setGoldAmount(e.target.value)} placeholder="Enter whole number"/></label><div className="hqps-gold-actions"><button type="button" className="hqps-gold-add" onClick={()=>confirmGoldChange("add")} disabled={!canEdit || !goldAmount.trim()}>Add Gold</button><button type="button" className="hqps-gold-subtract" onClick={()=>confirmGoldChange("subtract")} disabled={!canEdit || !goldAmount.trim()}>Subtract Gold</button></div></div><label>Existing spell / scroll notes<textarea rows="2" value={draft.spells} onChange={e=>updateField("spells",e.target.value)}/></label></div>
         <div className="hqps-detail-launchers">
           <button type="button" className="hqps-detail-launcher" onClick={()=>{setSpellKind("Spell Card");setActiveDetail("spells");}}><span><b>Spells</b><small>{(draft.spellCards||[]).filter(card=>!card.hidden&&!card.used&&card.category!=="Spell Scroll").length} owned</small></span><ChevronDown size={16}/></button>
           <button type="button" className="hqps-detail-launcher" onClick={()=>{setSpellKind("Spell Scroll");setActiveDetail("scrolls");}}><span><b>Scrolls</b><small>{(draft.spellCards||[]).filter(card=>!card.hidden&&!card.used&&card.category==="Spell Scroll").length} owned</small></span><ChevronDown size={16}/></button>
@@ -476,7 +529,8 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       </fieldset>
       <div className="hqps-actions">
         {canEdit && <button type="button" className="primary" onClick={()=>saveSheet(false)} disabled={working || !dirty}><Save size={14}/>{working?"Saving…":"Save sheet"}</button>}
-        {isOwner && <button type="button" className="secondary danger" onClick={deleteSheet} disabled={working}><Trash2 size={14}/> Delete my sheet</button>}
+        {isOwner && <button type="button" className={selectedSheet.is_active?"secondary hqps-active-button":"primary hqps-active-button"} onClick={setActiveCharacter} disabled={working || selectedSheet.is_active}>{selectedSheet.is_active?<><CheckCircle2 size={14}/> Active Character</>:<><Eye size={14}/> Set Active Character</>}</button>}
+        {canManageSelected && <button type="button" className="secondary danger" onClick={deleteSheet} disabled={working}><Trash2 size={14}/> Delete Character</button>}
         {!canEdit && <span className="hqps-readonly"><Eye size={14}/> Read-only view</span>}
         <span className="hqps-save-caption">{saveStatus==="saved"?"Saved to your account":statusText}{savedAt?" · "+formatSavedAt(savedAt):""}</span>
       </div>
