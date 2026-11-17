@@ -384,7 +384,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       ? "The amount exceeds the current balance, so the balance will become 0."
       : "The new balance will be "+nextBalance.toLocaleString()+" gold.";
     if (!window.confirm("Confirm "+action+" "+amount.toLocaleString()+" gold? Current balance: "+balance.toLocaleString()+". "+resultText)) return;
-    if (!window.confirm("FINAL CONFIRMATION: "+(direction === "add" ? "ADD " : "SUBTRACT ")+amount.toLocaleString()+" gold?")) return;
+    if (!window.confirm("FINAL CONFIRMATION: "+(direction === "add" ? "ADD " : "SUBTRACT ")+amount.toLocaleString()+" gold? "+(isShort?"The balance will be set to 0.":"New balance: "+nextBalance.toLocaleString()+" gold."))) return;
     updateField("gold",nextBalance);
     setGoldAmount("");
     setMessage(isShort
