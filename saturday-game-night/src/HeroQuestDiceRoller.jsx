@@ -35,8 +35,8 @@ export default function HeroQuestDiceRoller() {
     </div>
     {expanded && <div className="hq-dice-body">
       <div className="hq-dice-setup">
-        <label className="hq-dice-count">How many combat dice?<input type="number" min="1" max="100" value={diceCount} onChange={e=>setDiceCount(e.target.value)}/></label>
-        <div className="hq-dice-actions"><button type="button" className="primary" onClick={rollDice}><Dices size={14}/> Roll dice</button><button type="button" className="secondary" onClick={()=>{setResults([]);setMessage("");}}>Clear results</button></div>
+        <label className="hq-dice-count">How many combat dice?<input type="number" min="1" max="100" value={diceCount} onChange={e=>setDiceCount(e.target.value)}/><div className="hqps-number-stepper"><button type="button" onClick={()=>setDiceCount(v=>String(Math.max(1,Number(v||1)-1)))}>−</button><button type="button" onClick={()=>setDiceCount(v=>String(Math.min(100,Number(v||1)+1)))}>+</button></div></label>
+        <div className="hq-dice-actions"><button type="button" className="secondary" onClick={()=>{setResults([]);setMessage("");}}>Clear dice</button><button type="button" className="primary" onClick={rollDice}><Dices size={14}/> Roll dice</button></div>
       </div>
       {message && <p className="hq-dice-message" role="status">{message}</p>}
       {results.length>0 && <>

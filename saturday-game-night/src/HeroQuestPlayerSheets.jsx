@@ -52,9 +52,7 @@ function blankCharacter() {
   return {
     characterName:"",
     heroType:"Barbarian",
-    bodyStarting:8,
     bodyCurrent:8,
-    mindStarting:2,
     mindCurrent:2,
     attackDice:3,
     defendDice:2,
@@ -76,14 +74,13 @@ function hasSheetInformation(sheet) {
   return Boolean(
     (data.characterName || "").trim() ||
     (data.spells || "").trim() ||
+    (Array.isArray(data.spellCards) && data.spellCards.length > 0) ||
     (data.questsCompleted || "").trim() ||
     (data.notes || "").trim() ||
     Number(data.gold || 0) > 0 ||
     (Array.isArray(data.inventory) && data.inventory.length > 0) ||
     (data.heroType && data.heroType !== "Barbarian") ||
-    (data.bodyStarting != null && Number(data.bodyStarting) !== 8) ||
     (data.bodyCurrent != null && Number(data.bodyCurrent) !== 8) ||
-    (data.mindStarting != null && Number(data.mindStarting) !== 2) ||
     (data.mindCurrent != null && Number(data.mindCurrent) !== 2) ||
     (data.attackDice != null && Number(data.attackDice) !== 3) ||
     (data.defendDice != null && Number(data.defendDice) !== 2)
@@ -111,6 +108,14 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
   const [customSource,setCustomSource] = useState("Custom");
   const [customCategory,setCustomCategory] = useState("Other");
   const [customDescription,setCustomDescription] = useState("");
+  const [spellSearch,setSpellSearch] = useState("");
+  const [spellSource,setSpellSource] = useState("All sources");
+  const [customSpellName,setCustomSpellName] = useState("");
+  const [showHiddenSpells,setShowHiddenSpells] = useState(false);
+  const [activeDetail,setActiveDetail] = useState("");
+  const [spellKind,setSpellKind] = useState("Spell Card");
+  const [editingSheetName,setEditingSheetName] = useState(false);
+  const [editingCharacterName,setEditingCharacterName] = useState(false);
   const [audit,setAudit] = useState([]);
   const saveTimer = useRef(null);
   const saveFunction = useRef(null);
@@ -122,6 +127,12 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     (sheet.owner_id === participantId || hasSheetInformation(sheet)) &&
     (!hideOthers || sheet.owner_id === participantId)
   ), [sheets,hideOthers,participantId]);
+  const spellCatalog = useMemo(() => {
+    const baseSpells = ["Ball of Flame","Courage","Fire of Wrath","Genie","Heal Body","Pass Through Rock","Rock Skin","Sleep","Swift Wind","Tempest","Veil of Mist","Water of Healing"].map(name=>({name,source:"Base Game",category:"Spell Card"}));
+    const expansionScrolls = ITEM_CATALOG.filter(item=>/^Spell Scroll:/i.test(item.name)).map(item=>({name:item.name.replace(/^Spell Scroll:\s*/i,""),source:item.source,category:"Spell Scroll"}));
+    const unique = new Map([...baseSpells,...expansionScrolls].map(item=>[item.source+"::"+item.name,item]));
+    return [...unique.values()].filter(item=>(spellSource==="All sources"||item.source===spellSource)&&item.name.toLowerCase().includes(spellSearch.toLowerCase()));
+  },[spellSearch,spellSource]);
   const filteredItems = useMemo(() => ITEM_CATALOG.filter(item =>
     (itemCategory === "All" || item.category === itemCategory) &&
     (itemSource === "All sources" || item.source === itemSource) &&
@@ -323,6 +334,10 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       <button type="button" className="primary" onClick={createSheet} disabled={working || dirty}><FilePlus2 size={14}/> New sheet</button>
       <button type="button" className="quiet" onClick={loadSheets} title="Refresh sheets"><RefreshCw size={14}/></button>
     </div>
+    <div className="hqps-party-status">
+      <div className="hqps-section-title"><div><small>PARTY OVERVIEW</small><h4>Other players’ heroes</h4></div><span>{visibleSheets.filter(s=>s.owner_id!==participantId).length} players</span></div>
+      {visibleSheets.filter(s=>s.owner_id!==participantId).length===0 ? <p className="muted">No other saved character sheets are currently visible.</p> : <div className="hqps-party-list">{visibleSheets.filter(s=>s.owner_id!==participantId).map(sheet=>{const data=sheet.sheet_data||{};const items=Array.isArray(data.inventory)?data.inventory.filter(item=>!item.hidden):[];return <button type="button" className={"hqps-party-card"+(selectedSheetId===sheet.id?" selected":"")} key={sheet.id} onClick={()=>openSheet(sheet)}><b>{data.characterName||sheet.sheet_name||"Unnamed hero"}</b><span className="hqps-party-type">{data.heroType||"Character type not set"}</span><span>Body <strong>{data.bodyCurrent??8}</strong></span><span>Mind <strong>{data.mindCurrent??2}</strong></span><span>Coins <strong>{Number(data.gold||0).toLocaleString()}</strong></span><span>{items.length} inventory {items.length===1?"item":"items"}</span><small className="hqps-party-inventory">{items.length?items.map(item=>item.name+(Number(item.quantity)>1?" ×"+item.quantity:"")).join(" · "):"No inventory items"}</small>{(()=>{const cards=Array.isArray(data.spellCards)?data.spellCards.filter(card=>!card.hidden):[];const legacy=(data.spells||"").trim();return <><span>{cards.length} spell / scroll {cards.length===1?"card":"cards"}</span><small className="hqps-party-spells">{cards.length?cards.map(card=>card.name).join(" · "):legacy||"No spells or scrolls"}</small></>;})()}</button>;})}</div>}
+    </div>
     {loading ? <p className="muted">Loading character sheets…</p> : !selectedSheet ? <div className="hqps-empty"><BookOpen size={26}/><b>No character sheet selected</b><span>Create your first sheet or choose another player's saved sheet.</span><button type="button" className="primary" onClick={createSheet} disabled={working}><Plus size={14}/> Create character sheet</button></div> : <>
       <div className="hqps-sheet-heading">
         <div><small>{isOwner?"YOUR CHARACTER SHEET":"PLAYER CHARACTER SHEET"}</small><h3>{selectedSheet.owner?.name || (isOwner?participantName:"Player")}</h3></div>
@@ -338,17 +353,27 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       </div>}
       <fieldset className="hqps-fieldset" disabled={!canEdit || working}>
         <div className="hqps-name-grid">
-          <label>Sheet name<input value={sheetName} onChange={e=>{setSheetName(e.target.value);setDirty(true);setSaveStatus("unsaved");}} maxLength={80}/></label>
-          <label>Character name<input value={draft.characterName} onChange={e=>updateField("characterName",e.target.value)} maxLength={60} placeholder="Enter hero name"/></label>
+          <div className="hqps-inline-name"><span>Sheet name</span>{editingSheetName && canEdit ? <input autoFocus value={sheetName} onChange={e=>{setSheetName(e.target.value);setDirty(true);setSaveStatus("unsaved");}} onBlur={()=>setEditingSheetName(false)} onKeyDown={e=>{if(e.key==="Enter")setEditingSheetName(false);if(e.key==="Escape"){setEditingSheetName(false);setSheetName(selectedSheet.sheet_name||"My HeroQuest Character");}}} maxLength={80}/> : <button type="button" className="hqps-name-display" onClick={()=>canEdit&&setEditingSheetName(true)}>{sheetName||"Untitled sheet"} {canEdit&&<Pencil size={12}/>}</button>}</div>
+          <div className="hqps-inline-name"><span>Character name</span>{editingCharacterName && canEdit ? <input autoFocus value={draft.characterName} onChange={e=>updateField("characterName",e.target.value)} onBlur={()=>setEditingCharacterName(false)} onKeyDown={e=>{if(e.key==="Enter")setEditingCharacterName(false);if(e.key==="Escape"){setEditingCharacterName(false);updateField("characterName",selectedSheet.sheet_data?.characterName||"");}}} maxLength={60}/> : <button type="button" className="hqps-name-display" onClick={()=>canEdit&&setEditingCharacterName(true)}>{draft.characterName||"Add character name"} {canEdit&&<Pencil size={12}/>}</button>}</div>
           <label>Hero type<select value={draft.heroType} onChange={e=>updateField("heroType",e.target.value)}>{HERO_TYPES.map(hero=><option key={hero}>{hero}</option>)}</select></label>
         </div>
         <div className="hqps-stat-grid">
-          <div className="hqps-stat-card"><b>Body Points</b><div><label>Current<input type="number" min="0" max="99" value={draft.bodyCurrent} onChange={e=>updateField("bodyCurrent",e.target.value)}/></label><label>Starting<input type="number" min="0" max="99" value={draft.bodyStarting} onChange={e=>updateField("bodyStarting",e.target.value)}/></label></div></div>
-          <div className="hqps-stat-card"><b>Mind Points</b><div><label>Current<input type="number" min="0" max="99" value={draft.mindCurrent} onChange={e=>updateField("mindCurrent",e.target.value)}/></label><label>Starting<input type="number" min="0" max="99" value={draft.mindStarting} onChange={e=>updateField("mindStarting",e.target.value)}/></label></div></div>
-          <div className="hqps-stat-card"><b>Combat Dice</b><div><label>Attack<input type="number" min="0" max="20" value={draft.attackDice} onChange={e=>updateField("attackDice",e.target.value)}/></label><label>Defend<input type="number" min="0" max="20" value={draft.defendDice} onChange={e=>updateField("defendDice",e.target.value)}/></label></div></div>
+          <div className="hqps-stat-card"><b>Body Points</b><div><label>Current<input type="number" min="0" max="99" value={draft.bodyCurrent} onChange={e=>updateField("bodyCurrent",e.target.value)}/></label><div className="hqps-number-stepper"><button type="button" onClick={()=>updateField("bodyCurrent",Math.max(0,Number(draft.bodyCurrent||0)-1))}>−</button><button type="button" onClick={()=>updateField("bodyCurrent",Math.min(99,Number(draft.bodyCurrent||0)+1))}>+</button></div></div></div>
+          <div className="hqps-stat-card"><b>Mind Points</b><div><label>Current<input type="number" min="0" max="99" value={draft.mindCurrent} onChange={e=>updateField("mindCurrent",e.target.value)}/></label><div className="hqps-number-stepper"><button type="button" onClick={()=>updateField("mindCurrent",Math.max(0,Number(draft.mindCurrent||0)-1))}>−</button><button type="button" onClick={()=>updateField("mindCurrent",Math.min(99,Number(draft.mindCurrent||0)+1))}>+</button></div></div></div>
+          <div className="hqps-stat-card"><b>Combat Dice</b><div><label>Attack<input type="number" min="0" max="20" value={draft.attackDice} onChange={e=>updateField("attackDice",e.target.value)}/></label><div className="hqps-number-stepper"><button type="button" onClick={()=>updateField("attackDice",Math.max(0,Number(draft.attackDice||0)-1))}>−</button><button type="button" onClick={()=>updateField("attackDice",Math.min(20,Number(draft.attackDice||0)+1))}>+</button></div><label>Defend<input type="number" min="0" max="20" value={draft.defendDice} onChange={e=>updateField("defendDice",e.target.value)}/></label><div className="hqps-number-stepper"><button type="button" onClick={()=>updateField("defendDice",Math.max(0,Number(draft.defendDice||0)-1))}>−</button><button type="button" onClick={()=>updateField("defendDice",Math.min(20,Number(draft.defendDice||0)+1))}>+</button></div></div></div>
         </div>
-        <div className="hqps-gold-row"><label>Gold coins<input type="number" min="0" value={draft.gold} onChange={e=>updateField("gold",e.target.value)}/></label><label>Spells / scrolls<textarea rows="2" value={draft.spells} onChange={e=>updateField("spells",e.target.value)} placeholder="List spells or scrolls..."/></label></div>
-        <div className="hqps-inventory">
+        <div className="hqps-gold-row"><label>Gold coins<input type="number" min="0" value={draft.gold} onChange={e=>updateField("gold",e.target.value)}/><div className="hqps-number-stepper"><button type="button" onClick={()=>updateField("gold",Math.max(0,Number(draft.gold||0)-1))}>−</button><button type="button" onClick={()=>updateField("gold",Number(draft.gold||0)+1)}>+</button></div></label><label>Existing spell / scroll notes<textarea rows="2" value={draft.spells} onChange={e=>updateField("spells",e.target.value)}/></label></div>
+        <div className="hqps-detail-launchers">
+          <button type="button" className="hqps-detail-launcher" onClick={()=>{setSpellKind("Spell Card");setActiveDetail("spells");}}><span><b>Spells</b><small>{(draft.spellCards||[]).filter(card=>!card.hidden&&card.category!=="Spell Scroll").length} owned</small></span><ChevronDown size={16}/></button>
+          <button type="button" className="hqps-detail-launcher" onClick={()=>{setSpellKind("Spell Scroll");setActiveDetail("scrolls");}}><span><b>Scrolls</b><small>{(draft.spellCards||[]).filter(card=>!card.hidden&&card.category==="Spell Scroll").length} owned</small></span><ChevronDown size={16}/></button>
+          <button type="button" className="hqps-detail-launcher" onClick={()=>setActiveDetail("inventory")}><span><b>Inventory</b><small>{draft.inventory.filter(item=>!item.hidden).length} items</small></span><ChevronDown size={16}/></button>
+        </div>
+        {activeDetail && <div className="hqps-detail-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setActiveDetail("");}}>
+          <section className="hqps-detail-modal" role="dialog" aria-modal="true" aria-label={activeDetail==="inventory"?"Inventory details":activeDetail==="scrolls"?"Scroll details":"Spell details"}>
+            <div className="hqps-detail-modal-head"><h3>{activeDetail==="inventory"?"Inventory":activeDetail==="scrolls"?"Scrolls":"Spells"}</h3><button type="button" className="icon-action" onClick={()=>setActiveDetail("")} aria-label="Close details"><X size={18}/></button></div>
+            <div className="hqps-detail-modal-body">
+              {activeDetail==="inventory" ? (
+<div className="hqps-inventory">
           <div className="hqps-section-title"><div><small>CHARACTER EQUIPMENT</small><h4>Inventory</h4></div><span>{draft.inventory.length} items</span></div>
           <details className="hqps-add-items">
             <summary><span><Plus size={14}/> Add items</span><small>Browse the catalog or enter a custom item</small></summary>
@@ -374,18 +399,31 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
               </div>
             </div>
           </details>
-          {draft.inventory.length>0 && <div className="hqps-inventory-list">
-            {draft.inventory.map((item,index)=><article className="hqps-inventory-item" key={item.id || index}>
-              <div className="hqps-inventory-item-top"><div><b>{item.name}</b><span className={item.source==="Base Game"?"hqps-source-base":item.source==="Custom"?"hqps-source-custom":"hqps-source-expansion"}>{item.source || "Custom"}</span></div>{canEdit && <button type="button" className="icon-action danger" onClick={()=>updateField("inventory",draft.inventory.filter((_,i)=>i!==index))} title="Remove item"><Trash2 size={14}/></button>}</div>
+          {draft.inventory.some(item=>!item.hidden) && <div className="hqps-inventory-list">
+            {draft.inventory.map((item,index)=>!item.hidden && <article className="hqps-inventory-item" key={item.id || index}>
+              <div className="hqps-inventory-item-top"><div><b>{item.name}</b><span className={item.source==="Base Game"?"hqps-source-base":item.source==="Custom"?"hqps-source-custom":"hqps-source-expansion"}>{item.source || "Custom"}</span></div>{canEdit && <><button type="button" className="quiet" onClick={()=>updateInventory(index,{hidden:!item.hidden})}>{item.hidden?"Restore":"Hide"}</button><button type="button" className="icon-action danger" onClick={()=>updateField("inventory",draft.inventory.filter((_,i)=>i!==index))} title="Remove item"><Trash2 size={14}/></button></>}</div>
               {item.description && <p>{item.description}</p>}
               <div className="hqps-item-fields">
-                <label>Quantity<input type="number" min="1" max="999" value={item.quantity ?? 1} onChange={e=>updateInventory(index,{quantity:e.target.value})}/></label>
-                <label>Charges / uses<input value={item.charges ?? ""} onChange={e=>updateInventory(index,{charges:e.target.value})} placeholder="Optional"/></label>
+                <label>Quantity<input type="number" min="1" max="999" value={item.quantity ?? 1} onChange={e=>updateInventory(index,{quantity:e.target.value})}/><div className="hqps-number-stepper"><button type="button" onClick={()=>updateInventory(index,{quantity:Math.max(1,Number(item.quantity??1)-1)})}>−</button><button type="button" onClick={()=>updateInventory(index,{quantity:Math.min(999,Number(item.quantity??1)+1)})}>+</button></div></label>
+                <label>Charges / uses<input type="number" min="0" value={item.charges ?? ""} onChange={e=>updateInventory(index,{charges:e.target.value})} placeholder="Optional"/><div className="hqps-number-stepper"><button type="button" onClick={()=>updateInventory(index,{charges:Math.max(0,Number(item.charges||0)-1)})}>−</button><button type="button" onClick={()=>updateInventory(index,{charges:Number(item.charges||0)+1})}>+</button></div></label>
                 <label className="hqps-equipped"><input type="checkbox" checked={!!item.equipped} onChange={e=>updateInventory(index,{equipped:e.target.checked})}/> Equipped</label>
               </div>
             </article>)}
           </div>}
+          {canEdit && draft.inventory.some(item=>item.hidden) && <details className="hqps-hidden-items"><summary>Hidden inventory ({draft.inventory.filter(item=>item.hidden).length})</summary>{draft.inventory.map((item,index)=>item.hidden&&<div key={item.id||index}><span>{item.name}</span><button type="button" className="quiet" onClick={()=>updateInventory(index,{hidden:false})}>Restore</button></div>)}</details>}
         </div>
+              ) : (
+<div className="hqps-spell-cards"><div className="hqps-section-title"><div><small>MAGIC & SCROLLS</small><h4>Spell cards & scrolls</h4></div><span>{(draft.spellCards||[]).filter(card=>!card.hidden).length} active</span></div>
+          <div className="hqps-catalog-controls"><label className="hqps-search"><Search size={15}/><input value={spellSearch} onChange={e=>setSpellSearch(e.target.value)} placeholder={"Search "+(spellKind==="Spell Scroll"?"scrolls":"spells")+"..."}/></label><select value={spellSource} onChange={e=>setSpellSource(e.target.value)}><option>All sources</option><option>Base Game</option>{EXPANSIONS.map(source=><option key={source}>{source}</option>)}</select></div>
+          <div className="hqps-spell-catalog">{spellCatalog.filter(card=>card.category===spellKind).map(card=><button type="button" key={card.source+"-"+card.name} className="hqps-spell-catalog-item" disabled={!canEdit} onClick={()=>{const current=draft.spellCards||[];if(!current.some(x=>x.name===card.name&&x.source===card.source))updateField("spellCards",[...current,{...card,id:crypto.randomUUID(),hidden:false,custom:false}]);}}><span><b>{card.name}</b><small>{card.category}</small></span><span className={card.source==="Base Game"?"hqps-source-base":"hqps-source-expansion"}>{card.source}</span><Plus size={14}/></button>)}</div>
+          <div className="hqps-custom-spell"><input value={customSpellName} onChange={e=>setCustomSpellName(e.target.value)} placeholder="Enter custom or missing spell / scroll"/><button type="button" className="secondary" disabled={!canEdit||!customSpellName.trim()} onClick={()=>{updateField("spellCards",[...(draft.spellCards||[]),{id:crypto.randomUUID(),name:customSpellName.trim(),source:"Custom",category:"Custom spell",custom:true,hidden:false}]);setCustomSpellName("");}}>Add custom card</button></div>
+          <label className="hqps-show-hidden"><input type="checkbox" checked={showHiddenSpells} onChange={e=>setShowHiddenSpells(e.target.checked)}/> Show hidden cards</label>
+          <div className="hqps-spell-owned">{(draft.spellCards||[]).filter(card=>(card.category==="Spell Scroll"?"Spell Scroll":"Spell Card")===spellKind&&(showHiddenSpells||!card.hidden)).map((card,index)=><div className={"hqps-spell-owned-card"+(card.hidden?" hidden":"")} key={card.id||index}><span><b>{card.name}</b><small>{card.source||"Custom"}</small></span>{canEdit&&<button type="button" className="quiet" onClick={()=>updateField("spellCards",(draft.spellCards||[]).map(item=>item.id===card.id?{...item,hidden:!item.hidden}:item))}>{card.hidden?"Restore":"Hide"}</button>}</div>)}</div>
+        </div>
+              )}
+            </div>
+          </section>
+        </div>}
         <div className="hqps-notes-grid">
           <label>Completed quests<textarea rows="3" value={draft.questsCompleted} onChange={e=>updateField("questsCompleted",e.target.value)} placeholder="Record completed quests..."/></label>
           <label>Character notes<textarea rows="3" value={draft.notes} onChange={e=>updateField("notes",e.target.value)} placeholder="Abilities, reminders, special rules..."/></label>
