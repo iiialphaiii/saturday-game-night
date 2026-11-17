@@ -40,7 +40,7 @@ export default function HeroQuestDiceRoller() {
       </div>
       {message && <p className="hq-dice-message" role="status">{message}</p>}
       {results.length>0 && <>
-        <div className="hq-dice-roll-summary"><span><b>{results.length}</b> dice rolled</span><span>All dice total: <b>{results.length}</b></span></div>
+        <div className="hq-dice-roll-summary"><span><b>{results.length}</b> dice rolled</span></div>
         <div className="hq-dice-totals">
           <div className="hq-dice-total skull"><Skull size={18}/><b>{totals.skull}</b><span>Skulls</span></div>
           <div className="hq-dice-total hero-shield"><Shield size={18}/><b>{totals.heroShield}</b><span>White shields</span></div>
