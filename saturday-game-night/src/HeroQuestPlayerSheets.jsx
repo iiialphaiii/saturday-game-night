@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, CheckCircle2, ChevronDown, Dices, Eye, EyeOff, FilePlus2, LoaderCircle, Pencil, Plus, RefreshCw, Save, Search, Shield, ShieldCheck, Skull, Trash2, X } from "lucide-react";
+import { BookOpen, CheckCircle2, ChevronDown, Eye, EyeOff, FilePlus2, LoaderCircle, Pencil, Plus, RefreshCw, Save, Search, ShieldCheck, Trash2, X } from "lucide-react";
 import "./player-sheets.css";
 
 const EXPANSIONS = [
@@ -112,10 +112,6 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
   const [customCategory,setCustomCategory] = useState("Other");
   const [customDescription,setCustomDescription] = useState("");
   const [audit,setAudit] = useState([]);
-  const [showHeroQuestDice,setShowHeroQuestDice] = useState(false);
-  const [heroQuestDiceCount,setHeroQuestDiceCount] = useState("6");
-  const [heroQuestDiceResults,setHeroQuestDiceResults] = useState([]);
-  const [heroQuestDiceMessage,setHeroQuestDiceMessage] = useState("");
   const saveTimer = useRef(null);
   const saveFunction = useRef(null);
 
@@ -131,11 +127,6 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     (itemSource === "All sources" || item.source === itemSource) &&
     item.name.toLowerCase().includes(itemSearch.toLowerCase())
   ), [itemSearch,itemCategory,itemSource]);
-  const heroQuestDiceTotals = useMemo(() => ({
-    skull:heroQuestDiceResults.filter(face=>face==="skull").length,
-    heroShield:heroQuestDiceResults.filter(face=>face==="heroShield").length,
-    monsterShield:heroQuestDiceResults.filter(face=>face==="monsterShield").length
-  }), [heroQuestDiceResults]);
 
   async function loadSheets() {
     if (!db || !participantId) return;
@@ -315,20 +306,6 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
     setMessage("Sheet deleted."); setWorking(false);
   }
 
-  function rollHeroQuestDice() {
-    const count = Number(heroQuestDiceCount);
-    if (!Number.isInteger(count) || count < 1 || count > 100) {
-      setHeroQuestDiceMessage("Choose between 1 and 100 HeroQuest combat dice.");
-      return;
-    }
-    const faces = Array.from({length:count}, () => {
-      const roll = Math.floor(Math.random() * 6);
-      return roll < 3 ? "skull" : roll < 5 ? "heroShield" : "monsterShield";
-    });
-    setHeroQuestDiceResults(faces);
-    setHeroQuestDiceMessage("Rolled "+count+" HeroQuest combat dice.");
-  }
-
   const statusText = saveStatus === "saving" ? "Saving…" : saveStatus === "unsaved" ? "Unsaved changes" : saveStatus === "failed" ? "Save failed" : "Saved";
   const statusClass = saveStatus === "failed" ? "failed" : saveStatus === "unsaved" ? "unsaved" : saveStatus === "saving" ? "saving" : "saved";
 
@@ -339,7 +316,7 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       <label className="hqps-sheet-picker">Saved character sheets
         <select value={selectedSheetId} onChange={e=>{const next=sheets.find(sheet=>sheet.id===e.target.value);if(next)openSheet(next);}}>
           <option value="">Choose a character sheet</option>
-          {visibleSheets.map(sheet=><option key={sheet.id} value={sheet.id}>{sheet.owner?.name || "Player"} · {sheet.sheet_name}</option>)}
+          {visibleSheets.map(sheet=>{const characterName=String(sheet.sheet_data?.characterName || "").trim();return <option key={sheet.id} value={sheet.id}>{sheet.owner?.name || "Player"} · {sheet.sheet_name}{characterName?" ("+characterName+")":""}</option>;})}
         </select>
       </label>
       <button type="button" className="secondary" onClick={toggleHideOthers}><span>{hideOthers?<Eye size={14}/>:<EyeOff size={14}/>}</span>{hideOthers?"Show other players":"Hide other players"}</button>
@@ -373,25 +350,30 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
         <div className="hqps-gold-row"><label>Gold coins<input type="number" min="0" value={draft.gold} onChange={e=>updateField("gold",e.target.value)}/></label><label>Spells / scrolls<textarea rows="2" value={draft.spells} onChange={e=>updateField("spells",e.target.value)} placeholder="List spells or scrolls..."/></label></div>
         <div className="hqps-inventory">
           <div className="hqps-section-title"><div><small>CHARACTER EQUIPMENT</small><h4>Inventory</h4></div><span>{draft.inventory.length} items</span></div>
-          <div className="hqps-catalog-controls">
-            <label className="hqps-search"><Search size={15}/><input value={itemSearch} onChange={e=>setItemSearch(e.target.value)} placeholder="Search official items..."/></label>
-            <select value={itemCategory} onChange={e=>setItemCategory(e.target.value)} aria-label="Filter item category">{CATEGORIES.map(category=><option key={category}>{category}</option>)}</select>
-            <select value={itemSource} onChange={e=>setItemSource(e.target.value)} aria-label="Filter item source"><option>All sources</option><option>Base Game</option>{EXPANSIONS.map(source=><option key={source}>{source}</option>)}<option>Kellar's Keep / Return of the Witch Lord</option></select>
-          </div>
-          <div className="hqps-catalog-results">
-            {filteredItems.map(item=><button type="button" key={item.id} className="hqps-catalog-item" onClick={()=>addCatalogItem(item)} disabled={!canEdit}><span><b>{item.name}</b><small>{item.category}</small></span><span className={item.source==="Base Game"?"hqps-source-base":"hqps-source-expansion"}>{item.source}</span><Plus size={14}/></button>)}
-            {!filteredItems.length && <p className="muted">No matching catalog items. Add it manually below.</p>}
-          </div>
-          <div className="hqps-custom-item">
-            <h5><Plus size={14}/> Add custom or missing item</h5>
-            <div className="hqps-custom-grid">
-              <label>Item name<input value={customName} onChange={e=>setCustomName(e.target.value)} placeholder="Enter item name"/></label>
-              <label>Category<select value={customCategory} onChange={e=>setCustomCategory(e.target.value)}>{["Weapon","Armor","Tool","Artifact","Potion","Treasure","Other"].map(x=><option key={x}>{x}</option>)}</select></label>
-              <label>Source<select value={customSource} onChange={e=>setCustomSource(e.target.value)}><option>Custom</option><option>Base Game</option>{EXPANSIONS.map(source=><option key={source}>{source}</option>)}<option>Kellar's Keep / Return of the Witch Lord</option></select></label>
+          <details className="hqps-add-items">
+            <summary><span><Plus size={14}/> Add items</span><small>Browse the catalog or enter a custom item</small></summary>
+            <div className="hqps-add-items-content">
+              <div className="hqps-catalog-controls">
+                <label className="hqps-search"><Search size={15}/><input value={itemSearch} onChange={e=>setItemSearch(e.target.value)} placeholder="Search official items..."/></label>
+                <select value={itemCategory} onChange={e=>setItemCategory(e.target.value)} aria-label="Filter item category">{CATEGORIES.map(category=><option key={category}>{category}</option>)}</select>
+                <select value={itemSource} onChange={e=>setItemSource(e.target.value)} aria-label="Filter item source"><option>All sources</option><option>Base Game</option>{EXPANSIONS.map(source=><option key={source}>{source}</option>)}<option>Kellar's Keep / Return of the Witch Lord</option></select>
+              </div>
+              <div className="hqps-catalog-results">
+                {filteredItems.map(item=><button type="button" key={item.id} className="hqps-catalog-item" onClick={()=>addCatalogItem(item)} disabled={!canEdit}><span><b>{item.name}</b><small>{item.category}</small></span><span className={item.source==="Base Game"?"hqps-source-base":"hqps-source-expansion"}>{item.source}</span><Plus size={14}/></button>)}
+                {!filteredItems.length && <p className="muted">No matching catalog items. Add it manually below.</p>}
+              </div>
+              <div className="hqps-custom-item">
+                <h5><Plus size={14}/> Add custom or missing item</h5>
+                <div className="hqps-custom-grid">
+                  <label>Item name<input value={customName} onChange={e=>setCustomName(e.target.value)} placeholder="Enter item name"/></label>
+                  <label>Category<select value={customCategory} onChange={e=>setCustomCategory(e.target.value)}>{["Weapon","Armor","Tool","Artifact","Potion","Treasure","Other"].map(x=><option key={x}>{x}</option>)}</select></label>
+                  <label>Source<select value={customSource} onChange={e=>setCustomSource(e.target.value)}><option>Custom</option><option>Base Game</option>{EXPANSIONS.map(source=><option key={source}>{source}</option>)}<option>Kellar's Keep / Return of the Witch Lord</option></select></label>
+                </div>
+                <label>Description / special ability<textarea rows="2" value={customDescription} onChange={e=>setCustomDescription(e.target.value)} placeholder="Optional item details"/></label>
+                <button type="button" className="secondary" onClick={addCustomItem} disabled={!canEdit || !customName.trim()}><Plus size={14}/> Add item</button>
+              </div>
             </div>
-            <label>Description / special ability<textarea rows="2" value={customDescription} onChange={e=>setCustomDescription(e.target.value)} placeholder="Optional item details"/></label>
-            <button type="button" className="secondary" onClick={addCustomItem} disabled={!canEdit || !customName.trim()}><Plus size={14}/> Add item</button>
-          </div>
+          </details>
           {draft.inventory.length>0 && <div className="hqps-inventory-list">
             {draft.inventory.map((item,index)=><article className="hqps-inventory-item" key={item.id || index}>
               <div className="hqps-inventory-item-top"><div><b>{item.name}</b><span className={item.source==="Base Game"?"hqps-source-base":item.source==="Custom"?"hqps-source-custom":"hqps-source-expansion"}>{item.source || "Custom"}</span></div>{canEdit && <button type="button" className="icon-action danger" onClick={()=>updateField("inventory",draft.inventory.filter((_,i)=>i!==index))} title="Remove item"><Trash2 size={14}/></button>}</div>
@@ -418,24 +400,5 @@ export default function HeroQuestPlayerSheets({ db, participantId, participantNa
       {message && <p className="hqps-message" role="status">{message}</p>}
       {canAdminEdit && audit.length>0 && <details className="hqps-audit"><summary>Admin edit history ({audit.length}) <ChevronDown size={14}/></summary>{audit.map(entry=><div key={entry.id}><b>{entry.actor?.name || (entry.actor_role==="admin"?"Admin":entry.actor_role==="game_admin"?"Game Admin":"Authorized editor")}</b><span>{entry.actor_role==="admin"?"Admin":entry.actor_role==="game_admin"?"Game Admin":"Editor"} · {entry.summary || entry.action} · {formatSavedAt(entry.created_at)}</span></div>)}</details>}
     </>}
-    <div className="hq-dice-tool">
-      <div className="hq-dice-toggle-row">
-        <div><small>OPTIONAL HEROQUEST TOOL</small><h3><Dices size={18}/> HeroQuest Dice Roller</h3><p className="muted">Uses the HeroQuest combat die: 3 skulls, 2 white shields and 1 black shield.</p></div>
-        <button type="button" className="secondary" aria-expanded={showHeroQuestDice} onClick={()=>setShowHeroQuestDice(value=>!value)}>{showHeroQuestDice?"Hide HeroQuest dice":"Use HeroQuest dice"}</button>
-      </div>
-      {showHeroQuestDice && <div className="hq-dice-body">
-        <label className="hq-dice-count">How many combat dice?<input type="number" min="1" max="100" value={heroQuestDiceCount} onChange={e=>setHeroQuestDiceCount(e.target.value)}/></label>
-        <div className="hq-dice-actions"><button type="button" className="primary" onClick={rollHeroQuestDice}><Dices size={14}/> Roll HeroQuest dice</button><button type="button" className="secondary" onClick={()=>{setHeroQuestDiceResults([]);setHeroQuestDiceMessage("");}}>Clear results</button></div>
-        {heroQuestDiceMessage && <p className="hq-dice-message" role="status">{heroQuestDiceMessage}</p>}
-        {heroQuestDiceResults.length>0 && <>
-          <div className="hq-dice-totals">
-            <div className="hq-dice-total skull"><Skull size={18}/><b>{heroQuestDiceTotals.skull}</b><span>Skulls</span></div>
-            <div className="hq-dice-total hero-shield"><Shield size={18}/><b>{heroQuestDiceTotals.heroShield}</b><span>White shields</span></div>
-            <div className="hq-dice-total monster-shield"><Shield size={18} fill="currentColor"/><b>{heroQuestDiceTotals.monsterShield}</b><span>Black shields</span></div>
-          </div>
-          <div className="hq-dice-results" aria-label="HeroQuest dice results">{heroQuestDiceResults.map((face,index)=><div className={"hq-die "+face} key={index}><span>{face==="skull"?<Skull size={22}/>:<Shield size={22} fill={face==="monsterShield"?"currentColor":"none"}/>}</span><small>Die {index+1}</small></div>)}</div>
-        </>}
-      </div>}
-    </div>
   </section>;
 }
