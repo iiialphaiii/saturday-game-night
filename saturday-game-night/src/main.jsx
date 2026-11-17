@@ -134,7 +134,6 @@ function App() {
   const [accountMode, setAccountMode] = useState(false);
   const [activeTab, setActiveTab] = useState("attendance");
   const [toolsMode,setToolsMode] = useState("regular");
-  const [heroQuestSection,setHeroQuestSection] = useState("sheets");
   const [regularDiceExpanded,setRegularDiceExpanded] = useState(true);
   const [hqRegularDiceExpanded,setHqRegularDiceExpanded] = useState(false);
   const [diceGroups, setDiceGroups] = useState([{ id: 1, count: "2", sides: "20" }]);
