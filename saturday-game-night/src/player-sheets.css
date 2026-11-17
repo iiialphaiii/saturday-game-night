@@ -56,3 +56,17 @@
   background:#141620 !important;
   opacity:1 !important;
 }
+
+
+/* HeroQuest tools stack and used-item history */
+.hq-tools-stack{display:grid;gap:16px}
+.hq-tools-stack>.game-tools-panel,.hq-tools-stack>.hq-dice-tool,.hq-tools-stack>.hqps-panel{width:100%;max-width:100%;margin:0}
+.hqps-use-button{min-height:32px;padding:7px 10px;font-size:10px;white-space:nowrap}
+.hqps-item-fields .hqps-use-button{align-self:end}
+.hqps-used-list{display:grid;gap:9px}
+.hqps-used-list article{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 12px;border:1px solid #343747;border-radius:9px;background:#171a25}
+.hqps-used-list article>div{display:grid;gap:4px;min-width:0}
+.hqps-used-list article b{font-size:12px}
+.hqps-used-list article small,.hqps-used-list article time{font-size:10px;color:#999cac;line-height:1.45}
+.hqps-used-list article time{text-align:right;flex:none;max-width:42%}
+@media(max-width:560px){.hqps-used-list article{flex-direction:column}.hqps-used-list article time{max-width:none;text-align:left}}
